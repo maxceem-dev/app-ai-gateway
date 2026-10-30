@@ -63,6 +63,7 @@ import {
   OAuthConsentAllowRequestSchema,
   OAuthConsentProofSchema,
   SendVerificationEmailRequestSchema,
+  SupportMessageRequestSchema,
   ConfirmEmailVerificationRequestSchema,
   OrganizationSelectRequestSchema,
   PROVIDER_SLUG_PATTERN,
@@ -106,6 +107,7 @@ import {
   OAuthConsentDetailsResponseSchema,
   OAuthConsentRedirectResponseSchema,
   SendVerificationEmailResponseSchema,
+  SupportMessageResponseSchema,
   ConfirmEmailVerificationResponseSchema,
   OrganizationListResponseSchema,
   PricesResponseSchema,
@@ -651,6 +653,31 @@ export const CATALOG = {
     request: BillingTrialRequestSchema,
     response: BillingAccessSchema,
     responseDescription: "Trial access state.",
+  },
+
+  /*
+   * Support is part of a paid plan, so it sits with billing: the Support menu
+   * is offered only to an organization on one, and this refuses everyone else
+   * the same way. Any member may write, read-only ones included — reporting a
+   * bug changes nothing in the account.
+   */
+  sendSupportMessage: {
+    method: "POST",
+    path: "/v1/admin/support",
+    hidden: true,
+    tags: ["Admin billing"],
+    summary: "Send a message to support",
+    security: "management",
+    policy: { role: "member", access: "read", session: true },
+    request: SupportMessageRequestSchema,
+    response: SupportMessageResponseSchema,
+    responseDescription: "The message went to the support inbox; replies go to the sender.",
+    errors: {
+      403: "The organization is not on a paid plan (`forbidden`).",
+      409: "The sign-in has no email address to reply to (`conflict`).",
+      429: "Too many messages were sent from this sign-in. Carries Retry-After.",
+      503: "The deployment could not send the email (`email_unavailable`).",
+    },
   },
 
   getApp: {

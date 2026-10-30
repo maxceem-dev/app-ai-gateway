@@ -7,6 +7,7 @@ import { clientAddress, enforceEndpointRateLimit } from "../core/endpoint-rate-l
 import { GatewayError } from "../core/errors";
 import { confirmEmailVerification, sendVerificationEmail } from "../auth/email-verification";
 import { publicApiOrigin } from "../core/public-api-url";
+import { supportInbox } from "../management/support";
 import {
   allowOauthConsent,
   continueOauthWithoutAccount,
@@ -38,6 +39,7 @@ consoleRoutes.get("/capabilities", async (c) => c.json({
   // clients; otherwise the console builds client URLs from its own origin.
   apiBaseUrl: publicApiOrigin(c.env),
   emailVerification: c.get("deployment").emailVerification === "required",
+  supportEmail: supportInbox(c.env, c.get("deployment")) ?? undefined,
 } satisfies ConsoleCapabilitiesResponse));
 
 /**

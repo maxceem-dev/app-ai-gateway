@@ -3156,6 +3156,10 @@
                     },
                     "emailVerification": {
                       "type": "boolean"
+                    },
+                    "supportEmail": {
+                      "type": "string",
+                      "format": "email"
                     }
                   },
                   "required": [
@@ -5705,6 +5709,157 @@
           },
           "404": {
             "description": "The requested resource does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/support": {
+      "post": {
+        "tags": [
+          "Admin billing"
+        ],
+        "operationId": "sendSupportMessage",
+        "summary": "Send a message to support",
+        "security": [
+          {
+            "ConsoleSession": []
+          },
+          {
+            "ManagementBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "bug",
+                      "support",
+                      "feedback"
+                    ]
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 10000
+                  },
+                  "page": {
+                    "type": "string",
+                    "maxLength": 512,
+                    "pattern": "^\\/(?![/\\\\])[^\\\\\\s]*$",
+                    "description": "A path on the console to return to once the address is verified, such as an approval page."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The message went to the support inbox; replies go to the sender.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "sent"
+                      ]
+                    },
+                    "replyTo": {
+                      "type": "string",
+                      "description": "The address support will reply to: the sender's own."
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "replyTo"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication is required or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organization is not on a paid plan (`forbidden`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested resource does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The sign-in has no email address to reply to (`conflict`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many messages were sent from this sign-in. Carries Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The deployment could not send the email (`email_unavailable`).",
             "content": {
               "application/json": {
                 "schema": {

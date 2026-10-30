@@ -11,7 +11,7 @@ describe("generated OpenAPI contract", () => {
       "/v1/admin/billing/plans", "/v1/admin/billing/status",
       "/v1/admin/billing/checkout", "/v1/admin/billing/change",
       "/v1/admin/billing/resume", "/v1/admin/billing/cancel",
-      "/v1/admin/billing/trial",
+      "/v1/admin/billing/trial", "/v1/admin/support",
     ];
     for (const path of hiddenPaths) {
       expect(full.paths).toHaveProperty(path);

@@ -1,23 +1,33 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useLocation, useMatch, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
+  Bug,
   Cable,
   ChevronsUpDown,
   CreditCard,
   Eye,
   KeyRound,
+  Headset,
   LayoutGrid,
+  LifeBuoy,
   LogOut,
+  MessageSquareHeart,
   Plug,
   Settings,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import type { SupportMessageKind } from "@contracts/schemas";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuPortal,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -25,6 +35,7 @@ import { AllowanceBar } from "@/components/allowance-bar";
 import { Brand } from "@/components/brand";
 import { GettingStarted } from "@/components/getting-started";
 import { OrganizationMenuItems } from "@/components/org-switcher";
+import { SUPPORT_KINDS, SupportDialog, useSupportAvailable } from "@/components/support-dialog";
 import { AppStatusBadge } from "@/components/status-badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { APP_SECTIONS } from "@/lib/app-sections";
@@ -178,15 +189,62 @@ function initialsFor(name: string | null | undefined, email: string): string {
   return letters.toUpperCase();
 }
 
+const SUPPORT_ICONS: Record<SupportMessageKind, typeof LayoutGrid> = {
+  bug: Bug,
+  support: Headset,
+  feedback: MessageSquareHeart,
+};
+
+/**
+ * The Support submenu, for an organization on a paid plan. Its one label says
+ * why it is there — support comes with the plan — rather than a badge on the
+ * row, which would read as something to buy.
+ */
+function SupportMenu({ onChoose }: { onChoose: (kind: SupportMessageKind) => void }) {
+  const { billing } = useConsoleSession();
+  const plan = entitledPlan(billing);
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <LifeBuoy className="size-4" />
+        Human Support
+      </DropdownMenuSubTrigger>
+      {/* Portalled: the menu it opens from animates with a transform, which
+          would otherwise become the containing block it is positioned in. */}
+      <DropdownMenuPortal>
+        <DropdownMenuSubContent className="min-w-52">
+          {plan ? (
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+              Included with your {plan.planName} plan
+            </DropdownMenuLabel>
+          ) : null}
+          {(Object.keys(SUPPORT_KINDS) as SupportMessageKind[]).map((kind) => {
+            const Icon = SUPPORT_ICONS[kind];
+            return (
+              <DropdownMenuItem key={kind} onSelect={() => onChoose(kind)}>
+                <Icon className="size-4" />
+                {SUPPORT_KINDS[kind].menuLabel}
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuSubContent>
+      </DropdownMenuPortal>
+    </DropdownMenuSub>
+  );
+}
+
 /**
  * The account block. Names the operator and nothing else; opening it reveals
  * the account-scoped and organization-scoped screens, the organizations they
- * can act as, and sign-out.
+ * can act as, support where their plan includes it, and sign-out.
  */
 function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
   const navigate = useNavigate();
   const { session, capabilities } = useConsoleSession();
   const signOut = useSignOut();
+  const supportAvailable = useSupportAvailable();
+  const [support, setSupport] = useState<SupportMessageKind | null>(null);
 
   const logout = async () => {
     await signOut.mutateAsync().catch(() => undefined);
@@ -197,58 +255,70 @@ function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
   const name = session.user?.name?.trim() || email;
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className={cn(
-          "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors",
-          "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-          "data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
-          "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        )}
-      >
-        <span
-          aria-hidden
-          className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground"
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          className={cn(
+            "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors",
+            "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+            "data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground",
+            "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          )}
         >
-          {initialsFor(session.user?.name, email)}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
-        <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        side="top"
-        align="start"
-        sideOffset={8}
-        className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
-      >
-        <DropdownMenuItem asChild>
-          <Link to="/settings" onClick={onNavigate}>
-            <Settings className="size-4" />
-            Settings
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to="/access" onClick={onNavigate}>
-            <KeyRound className="size-4" />
-            Access
-          </Link>
-        </DropdownMenuItem>
-        {capabilities.billing ? (
+          <span
+            aria-hidden
+            className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground"
+          >
+            {initialsFor(session.user?.name, email)}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
+          <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          side="top"
+          align="start"
+          sideOffset={8}
+          className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
+        >
           <DropdownMenuItem asChild>
-            <Link to="/billing" onClick={onNavigate}>
-              <CreditCard className="size-4" />
-              Billing
+            <Link to="/settings" onClick={onNavigate}>
+              <Settings className="size-4" />
+              Settings
             </Link>
           </DropdownMenuItem>
-        ) : null}
-        <OrganizationMenuItems />
-        <DropdownMenuSeparator />
-        <DropdownMenuItem disabled={signOut.isPending} onSelect={() => void logout()}>
-          <LogOut className="size-4" />
-          Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <DropdownMenuItem asChild>
+            <Link to="/access" onClick={onNavigate}>
+              <KeyRound className="size-4" />
+              Access
+            </Link>
+          </DropdownMenuItem>
+          {capabilities.billing ? (
+            <DropdownMenuItem asChild>
+              <Link to="/billing" onClick={onNavigate}>
+                <CreditCard className="size-4" />
+                Billing
+              </Link>
+            </DropdownMenuItem>
+          ) : null}
+          <OrganizationMenuItems />
+          {supportAvailable ? (
+            <>
+              <DropdownMenuSeparator />
+              <SupportMenu onChoose={setSupport} />
+            </>
+          ) : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={signOut.isPending} onSelect={() => void logout()}>
+            <LogOut className="size-4" />
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {/* Outside the menu, which unmounts its content as it closes. */}
+      {supportAvailable ? (
+        <SupportDialog kind={support} onOpenChange={(open) => !open && setSupport(null)} />
+      ) : null}
+    </>
   );
 }
 

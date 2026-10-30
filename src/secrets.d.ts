@@ -75,6 +75,10 @@ interface Env {
   EMAIL_FROM?: string;
   // Where replies go instead, for example a support inbox. Optional.
   EMAIL_REPLY_TO?: string;
+  // The inbox the console's Support menu writes to, for organizations on a
+  // paid plan. Needs billing and email sending; unset hides the menu. Not a
+  // secret.
+  SUPPORT_EMAIL?: string;
   // The vault mode, KEK version and registration list are plain `vars` in wrangler.jsonc, so the
   // deploy form shows their defaults in clear text. `wrangler types` narrows a
   // var to the literal it finds there, which is wrong for any deployment that
@@ -120,6 +124,7 @@ declare namespace Cloudflare {
     EMAIL_SENDER?: string;
     EMAIL_FROM?: string;
     EMAIL_REPLY_TO?: string;
+    SUPPORT_EMAIL?: string;
     SECRET_VAULT_MODE: string;
     SECRET_VAULT_LOCAL_KEK_CURRENT_VERSION: string;
     ALLOWED_REGISTRATION_EMAILS: string;

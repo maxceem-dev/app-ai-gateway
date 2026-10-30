@@ -417,6 +417,12 @@ export function useChangePlan() {
   });
 }
 
+export function useSendSupportMessage() {
+  return useMutation({
+    mutationFn: (body: OperationRequest<"sendSupportMessage">) => call("sendSupportMessage", { body }),
+  });
+}
+
 export function useCancelSubscription() {
   const client = useQueryClient();
   return useMutation({

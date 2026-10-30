@@ -10,3 +10,4 @@ import "../app-operations.test";
 import "../mcp.test";
 import "../mcp-mutations.test";
 import "../management-analytics.test";
+import "../support.test";

@@ -12,6 +12,7 @@ import { providerRoutes } from "./providers";
 import { providerGatewayRoutes } from "./provider-gateways";
 import { organizationRoutes } from "./organizations";
 import { billingRoutes } from "./billing";
+import { supportRoutes } from "./support";
 
 type AdminEnv = { Bindings: Env; Variables: AdminVariables };
 
@@ -34,3 +35,4 @@ adminRoutes.route("/", providerRoutes);
 adminRoutes.route("/", providerGatewayRoutes);
 adminRoutes.route("/", organizationRoutes);
 adminRoutes.route("/billing", billingRoutes);
+adminRoutes.route("/", supportRoutes);

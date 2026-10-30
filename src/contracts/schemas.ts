@@ -1095,3 +1095,27 @@ export const ConfirmEmailVerificationRequestSchema = z.object({
     description: "The `token` query parameter of the link in the verification email.",
   }),
 }).strict();
+
+/** What a support message is about, which the console's Support menu offers one item for each. */
+export const SupportMessageKindSchema = z.enum(["bug", "support", "feedback"]);
+
+/**
+ * Each kind's topic, which is the email's subject: the message alone is what a
+ * person writes, so the subject is never theirs to fill in.
+ */
+export const SUPPORT_TOPICS: Record<z.infer<typeof SupportMessageKindSchema>, string> = {
+  bug: "Bug report",
+  support: "Support request",
+  feedback: "Feedback",
+};
+
+/** A message to the deployment's support inbox, from the person signed in. */
+export const SupportMessageRequestSchema = z.object({
+  kind: SupportMessageKindSchema,
+  message: z.string().trim().min(1, "Write a message").max(10_000),
+  /** The console page the message was written from, for context. */
+  page: ConsoleReturnPathSchema.optional(),
+}).strict();
+
+export type SupportMessageKind = z.infer<typeof SupportMessageKindSchema>;
+export type SupportMessageRequest = z.infer<typeof SupportMessageRequestSchema>;
