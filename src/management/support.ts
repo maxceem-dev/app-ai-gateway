@@ -1,116 +1,130 @@
-import { getBillingAccess, type BillingRequestCache } from "../billing/gateway";
-import { SUPPORT_TOPICS, type SupportMessageRequest } from "../contracts/schemas";
+import type { AuthState } from "@maxceem/cf-auth";
+import { getBillingAccess } from "../billing/gateway";
+import type { SupportMessageRequest } from "../contracts/schemas";
 import type { SupportMessageResponse } from "../contracts/responses";
 import { enforceEndpointRateLimit } from "../core/endpoint-rate-limit";
 import { errorFacts } from "../core/error-facts";
 import { GatewayError } from "../core/errors";
 import { log } from "../core/log";
-import { emailSender, emailSetup } from "../email/sender";
+import type { HelpdeskChannel, HelpdeskTicketResult } from "../helpdesk/contract";
 import type { Deployment } from "../policy/deployment";
+import type { AdminActor } from "./actor";
+import type { ManagementScope } from "./scope";
 
 /**
- * Messages from the console's Support menu to the deployment's support inbox.
+ * Messages to human support, from the console's Human Support menu,
+ * `agw support send` and the MCP `contact_support` tool alike.
  *
  * Support is part of a paid plan, so it exists only where there are plans and
- * a way to send email, and only for an organization holding one. The email is
- * sent from the deployment's own address with the person's as its reply-to, so
- * answering it in the inbox answers them, and the conversation carries on in
- * email rather than in the console.
+ * a help desk bound as `HELPDESK`, and only for an organization holding one.
+ * The help desk keeps the ticket, refuses a pasted credential, recognises a
+ * repeated message, and emails the support inbox with the person's address as
+ * the reply-to, so the conversation carries on in email rather than in the
+ * console.
  */
 
-/** Addresses accepted as an inbox: the same bare `local@domain` the sender reads. */
+/** The gateway's id at the help desk. */
+export const HELPDESK_SERVICE_ID = "app-ai-gateway";
+
+/** Addresses accepted as an inbox: a bare `local@domain`. */
 const INBOX_ADDRESS = /^[^\s<>()[\],;:"\\@\x00-\x1f\x7f]+@[^\s<>()[\],;:"\\@\x00-\x1f\x7f]+$/;
 
-const SENDER_NAME = "App AI Gateway Support";
+/** The help desk's channel for each credential source. */
+const CHANNELS: Record<string, HelpdeskChannel> = {
+  web: "console",
+  cli: "cli",
+  mcp: "mcp",
+  api: "api",
+};
 
 /**
- * The inbox the Support menu writes to, or null where the deployment offers no
- * support: no `SUPPORT_EMAIL`, no billing to tell a paid plan from a free one,
- * or no working way to send email. Reads strings only, so the public
- * capabilities answer can ask it on every request.
+ * The inbox the Human Support menu names, or null where the deployment offers
+ * no support: no `HELPDESK` binding, no `SUPPORT_EMAIL` to show, or no billing
+ * to tell a paid plan from a free one. The address is only shown, for people
+ * who prefer their own mail app; the help desk decides where tickets go.
+ * Reads the environment only, so the public capabilities answer can ask it on
+ * every request.
  */
 export function supportInbox(env: Env, deployment: Deployment): string | null {
+  if (!env.HELPDESK) return null;
   const inbox = env.SUPPORT_EMAIL?.trim();
   if (!inbox || !INBOX_ADDRESS.test(inbox)) return null;
-  if (deployment.billing === null) return null;
-  return emailSetup(env).state === "ok" ? inbox : null;
+  return deployment.billing === null ? null : inbox;
 }
 
-/** Who is writing, as the session names them. */
-export interface SupportSender {
-  userId: string;
-  email: string | null | undefined;
-  name: string | null | undefined;
-  organizationId: string;
-  organizationName: string | null | undefined;
-}
-
-export async function sendSupportMessage(
-  env: Env,
-  deployment: Deployment,
-  sender: SupportSender,
-  input: SupportMessageRequest,
-  cache?: BillingRequestCache,
-): Promise<SupportMessageResponse> {
-  const inbox = supportInbox(env, deployment);
-  if (inbox === null) throw new GatewayError(404, "not_found", "This deployment does not offer support");
+export async function sendSupportMessage(input: {
+  scope: ManagementScope;
+  actor: AdminActor;
+  state: AuthState;
+  body: SupportMessageRequest;
+}): Promise<SupportMessageResponse> {
+  const { scope, actor, state, body } = input;
+  const { env, deployment } = scope;
+  const helpdesk = env.HELPDESK;
+  if (!helpdesk || supportInbox(env, deployment) === null) {
+    throw new GatewayError(404, "not_found", "This deployment does not offer human support");
+  }
 
   /*
    * A paid plan is one that is not the service's default. An outage is not a
    * statement about the organization, and it is exactly when a paying customer
    * most needs to write in, so a message is still sent while billing cannot be
-   * reached; the email says the plan could not be read.
+   * reached; the ticket says the plan could not be read.
    */
-  const access = await getBillingAccess(deployment, sender.organizationId, cache);
+  const access = await getBillingAccess(deployment, actor.organizationId, scope.billingCache);
   const plan = access.state === "billed" ? access.plan : null;
   if (access.state !== "unavailable" && (plan === null || plan.isDefault)) {
-    throw new GatewayError(403, "forbidden", "Support is included with paid plans");
+    throw new GatewayError(
+      403,
+      "support_plan_required",
+      "Human support is included with paid plans. An account owner can choose one on the Billing page of the console.",
+    );
   }
-  if (!sender.email) throw new GatewayError(409, "conflict", "This sign-in has no email address to reply to");
+  const email = state.user?.email;
+  if (!email) throw new GatewayError(409, "conflict", "This credential's owner has no email address to reply to");
 
-  await enforceEndpointRateLimit(env, "support_message", sender.userId);
+  await enforceEndpointRateLimit(env, "support_message", actor.userId);
 
-  const facts: [string, string][] = [
-    ["From", sender.name?.trim() ? `${sender.name.trim()} <${sender.email}>` : sender.email],
-    ["User", sender.userId],
-    ["Organization", sender.organizationName ? `${sender.organizationName} (${sender.organizationId})` : sender.organizationId],
-    ["Plan", plan ? plan.planName : "unknown (billing unreachable)"],
-    ...(input.page ? [["Page", new URL(input.page, deployment.consoleOrigin()).toString()] as [string, string]] : []),
-  ];
-  // The sender's address in it keeps two people's messages from threading
-  // together, since every one comes from the same address with the same topic.
-  const subject = `${SUPPORT_TOPICS[input.kind]} from ${sender.email}`;
-
-  // `supportInbox` already required a sender that is ready.
-  const setup = emailSetup(env) as Extract<ReturnType<typeof emailSetup>, { state: "ok" }>;
-  const sendWith = emailSender(env)!;
+  const name = state.user?.name?.trim();
+  const organizationName = state.organization?.name?.trim();
+  let result: HelpdeskTicketResult;
   try {
-    await sendWith.send({
-      from: { email: setup.from, name: SENDER_NAME },
-      replyTo: sender.email,
-      to: inbox,
-      subject,
-      text: [input.message, "", "---", ...facts.map(([label, value]) => `${label}: ${value}`)].join("\n"),
-      html: [
-        `<div style="white-space:pre-wrap">${escapeHtml(input.message)}</div>`,
-        "<hr>",
-        `<table style="font-size:12px;color:#666">${facts
-          .map(([label, value]) => `<tr><td style="padding-right:12px">${label}</td><td>${escapeHtml(value)}</td></tr>`)
-          .join("")}</table>`,
-      ].join(""),
+    result = await helpdesk.createTicket({
+      serviceId: HELPDESK_SERVICE_ID,
+      kind: body.kind,
+      message: body.message,
+      customer: { email, userId: actor.userId, ...(name ? { name: name.slice(0, 200) } : {}) },
+      account: {
+        tenantId: actor.organizationId,
+        ...(organizationName ? { name: organizationName.slice(0, 200) } : {}),
+        plan: plan ? plan.planName.slice(0, 100) : "unknown (billing unreachable)",
+      },
+      channel: CHANNELS[state.source ?? "api"] ?? "api",
+      ...(body.client ? { client: body.client } : {}),
+      ...(body.page ? { page: new URL(body.page, deployment.consoleOrigin()).toString() } : {}),
+      ...(body.context ? { context: body.context } : {}),
     });
   } catch (error) {
-    log("error", "support_email_failed", { transport: sendWith.transport, error: errorFacts(error) });
+    log("error", "support_helpdesk_failed", { error: errorFacts(error) });
     throw new GatewayError(503, "email_unavailable", "Your message could not be sent. Try again in a few minutes.");
   }
-  return { status: "sent", replyTo: sender.email };
-}
 
-function escapeHtml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+  if (result.ok) {
+    return { status: "sent", reference: result.reference, replyTo: result.replyTo, duplicate: result.duplicate };
+  }
+  switch (result.code) {
+    case "invalid_input":
+    case "credential_detected":
+      throw new GatewayError(400, "invalid_request", result.message);
+    case "rate_limited":
+      throw new GatewayError(
+        429,
+        "rate_limited",
+        result.message,
+        result.retryAfterSeconds === undefined ? undefined : { "Retry-After": String(result.retryAfterSeconds) },
+      );
+    case "unknown_service":
+      log("error", "support_helpdesk_unknown_service", { serviceId: HELPDESK_SERVICE_ID });
+      throw new GatewayError(404, "not_found", "This deployment does not offer human support");
+  }
 }

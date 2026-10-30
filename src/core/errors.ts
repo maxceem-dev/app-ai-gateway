@@ -65,6 +65,12 @@ export type ErrorCode =
    */
   | "email_unverified"
   | "billing_payment_required"
+  /**
+   * Human support is offered by this deployment, but not on the account's
+   * plan. Its own code rather than `forbidden`, which is about the caller's
+   * role: no role changes this, and an agent has to tell the person why.
+   */
+  | "support_plan_required"
   | "billing_unavailable"
   | "billing_not_found"
   | "billing_action_forbidden"

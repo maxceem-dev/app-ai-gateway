@@ -12,7 +12,6 @@ import { providerRoutes } from "./providers";
 import { providerGatewayRoutes } from "./provider-gateways";
 import { organizationRoutes } from "./organizations";
 import { billingRoutes } from "./billing";
-import { supportRoutes } from "./support";
 
 type AdminEnv = { Bindings: Env; Variables: AdminVariables };
 
@@ -23,6 +22,9 @@ export const adminRoutes = new Hono<AdminEnv>();
 
 /** Supplies the priced model catalog used by the proxy-policy editor. */
 adminRouter(adminRoutes).handle("listModelPrices");
+
+/** Human support, for the console, the CLI and the API alike; see `src/management/support.ts`. */
+adminRouter(adminRoutes).handle("sendSupportMessage");
 
 adminRoutes.route("/", appRoutes);
 adminRoutes.route("/", keyRoutes);
@@ -35,4 +37,3 @@ adminRoutes.route("/", providerRoutes);
 adminRoutes.route("/", providerGatewayRoutes);
 adminRoutes.route("/", organizationRoutes);
 adminRoutes.route("/billing", billingRoutes);
-adminRoutes.route("/", supportRoutes);

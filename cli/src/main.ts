@@ -9,6 +9,7 @@ import { helpText, parse, type ParseResult } from "./parser.ts";
 import { required, resourceCommand } from "./resources.ts";
 import type { CommandResult, RenderedResult } from "./results.ts";
 import { StateStore } from "./state.ts";
+import { supportCommand } from "./support.ts";
 import { styleFor } from "./style.ts";
 import { Transport } from "./transport.ts";
 import { positive, usageCommand } from "./usage.ts";
@@ -38,6 +39,7 @@ export async function execute(parsed: ParsedCommand, ctx: Context): Promise<Comm
     return resourceCommand(ctx, command, args, flags);
   if (command.startsWith("app ")) return appCommand(ctx, command, args, flags);
   if (command.startsWith("usage ")) return usageCommand(ctx, command, flags);
+  if (command === "support send") return supportCommand(ctx, flags);
   if (command.startsWith("operation "))
     return command === "operation wait"
       ? ctx.wait(args[0] ?? "", positive(flags.timeout ?? 300))

@@ -1109,12 +1109,30 @@ export const SUPPORT_TOPICS: Record<z.infer<typeof SupportMessageKindSchema>, st
   feedback: "Feedback",
 };
 
-/** A message to the deployment's support inbox, from the person signed in. */
+/** A diagnostic an agent attaches: a short name, and a short value. */
+const SUPPORT_CONTEXT_KEY = /^[A-Za-z][A-Za-z0-9_.-]{0,39}$/;
+
+/** A message to the deployment's support inbox, from the person the credential belongs to. */
 export const SupportMessageRequestSchema = z.object({
   kind: SupportMessageKindSchema,
-  message: z.string().trim().min(1, "Write a message").max(10_000),
+  message: z.string().trim().min(1, "Write a message").max(10_000).meta({
+    description: "What the person wants support to know, in their words. Never include a key, token or password.",
+  }),
   /** The console page the message was written from, for context. */
   page: ConsoleReturnPathSchema.optional(),
+  context: z
+    .record(
+      z.string().regex(SUPPORT_CONTEXT_KEY, "Context names are letters, digits, _ . and -, up to 40 characters"),
+      z.string().trim().min(1).max(500),
+    )
+    .refine((value) => Object.keys(value).length <= 20, "At most 20 context entries")
+    .optional()
+    .meta({
+      description: "Facts that help support act without asking back, such as app_id, request_id, error_code or agw_version. Never a credential.",
+    }),
+  client: z.string().trim().min(1).max(100).optional().meta({
+    description: "What sent the message, such as `agw 0.10.3`, as the client reports it. A label only.",
+  }),
 }).strict();
 
 export type SupportMessageKind = z.infer<typeof SupportMessageKindSchema>;

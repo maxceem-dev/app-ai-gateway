@@ -82,6 +82,7 @@ export const commands = {
   "usage breakdown": { args: 0, flags: "app by from to limit" },
   "operation status": { args: 1, flags: "" },
   "operation wait": { args: 1, flags: "timeout" },
+  "support send": { args: 0, flags: "type message message-stdin! context* yes!" },
 } as const satisfies Record<string, CommandSpec>;
 
 export type CommandName = keyof typeof commands;
@@ -110,6 +111,9 @@ export interface Flags {
   "clear-pricing"?: true;
   "clear-route"?: true;
   "all-providers"?: true;
+  "message-stdin"?: true;
+  message?: string;
+  context?: string | string[];
   name?: string;
   type?: string;
   slug?: string;
@@ -241,6 +245,7 @@ export function parse(argv: string[]): ParseResult {
     ["pricing", "clear-pricing"],
     ["route", "clear-route"],
     ["provider", "all-providers"],
+    ["message", "message-stdin"],
     ...(command === "app snippet" ? [["provider", "endpoint"]] : []),
   ]) {
     if (group.filter((k) => collected[k] !== undefined).length > 1)
@@ -289,5 +294,5 @@ export function helpText(scope = ""): string {
     )
     .join(
       "\n\n",
-    )}\n\n--json: structured stdout; --no-input: never prompt; --help, -h: this help.\nLogin: account login and deployment connect open the browser; check that it shows the pairing code the terminal prints. --no-open prints the URL instead; --key-stdin or --key-prompt takes a management key.\nCredentials: ${MANAGEMENT_KEY_ENV}, when set, is the management key for every command and overrides the saved login. account logout revokes the saved key.\nSecrets: hidden prompt by default; --key-stdin reads one line. Provider --browser submits credentials directly to your gateway.\nBrowser operations: --json or --no-input returns pending; operation wait resumes.\nNo account is created by help, status, list, validation or dry runs.\n`;
+    )}\n\n--json: structured stdout; --no-input: never prompt; --help, -h: this help.\nLogin: account login and deployment connect open the browser; check that it shows the pairing code the terminal prints. --no-open prints the URL instead; --key-stdin or --key-prompt takes a management key.\nCredentials: ${MANAGEMENT_KEY_ENV}, when set, is the management key for every command and overrides the saved login. account logout revokes the saved key.\nSecrets: hidden prompt by default; --key-stdin reads one line. Provider --browser submits credentials directly to your gateway.\nBrowser operations: --json or --no-input returns pending; operation wait resumes.\nSupport: support send emails human support for the signed-in person, who gets the reply by email. Without a terminal it needs --yes: show the person the message first. Never put a key or token in it.\nNo account is created by help, status, list, validation or dry runs.\n`;
 }

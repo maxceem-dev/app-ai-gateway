@@ -172,7 +172,22 @@ function render(
     case "deployment update":
     case "deployment domain":
       return deployment(result, style);
+    case "support send":
+      return support(result, style);
   }
+}
+
+/** `support send`: the reference to quote, and where the reply goes. */
+function support(result: RenderedResult, style: Style): string[] {
+  if (!("reference" in result)) return [];
+  return [
+    style.headline(
+      result.duplicate
+        ? `Already sent as ${result.reference} in the last ten minutes; nothing new was sent.`
+        : `Sent to human support as ${result.reference}.`,
+    ),
+    ...kv([["Replies go to", result.replyTo]], style),
+  ];
 }
 
 /** `account status`, `deployment status`, and the two commands that connect. */

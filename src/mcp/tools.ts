@@ -15,6 +15,7 @@ import {
   HandoffProviderUpdatePayloadSchema,
   HandoffRotatePayloadSchema,
   ProviderGatewayUpdateRequestSchema,
+  SupportMessageRequestSchema,
 } from "../contracts/schemas";
 import { GatewayError, type ErrorCode } from "../core/errors";
 import type { AdminActor } from "../management/actor";
@@ -31,6 +32,8 @@ import {
   reserveResourceOperation,
   type RecentOperation,
 } from "../management/resource-operations";
+import type { ManagementScope } from "../management/scope";
+import { supportInbox } from "../management/support";
 import { parseRequest } from "../management/validation";
 import { isSecretFieldName, secretField, type ResultPath } from "./secret-fields";
 import { checkOperatorBaseUrl } from "../core/origin-guard";
@@ -94,6 +97,7 @@ export const MCP_WRITE_OPERATIONS = [
   "updateProviderGateway",
   "deleteProvider",
   "deleteProviderGateway",
+  "sendSupportMessage",
 ] as const satisfies readonly RegisteredOperation[];
 
 export type WriteOperation = (typeof MCP_WRITE_OPERATIONS)[number];
@@ -134,6 +138,12 @@ export interface McpTool {
   readonly kind?: CliRequestedOperationKind;
   /** Whether a person completes what it opens by entering a secret in a browser. */
   readonly browserStep?: true;
+  /**
+   * Whether the deployment offers what the tool does at all. A tool that says
+   * no is left out of `tools/list` rather than listed and refused on every
+   * call; the answer is the deployment's, so the list stays fixed for it.
+   */
+  available?(scope: ManagementScope): boolean;
   /**
    * Path parameters and query fields of the operation, reusing the catalog's
    * own field schemas. What `tools/list` advertises, and only that: the
@@ -1357,6 +1367,45 @@ export const MCP_TOOLS: readonly McpTool[] = [
     summary: (raw) => {
       const result = raw as OpenedOperationResult;
       return `Opened claim ${result.id}. The person who should own the account opens ${result.url} in their own browser before ${result.expiresAt} and approves; then call get_operation.`;
+    },
+  },
+  {
+    name: "contact_support",
+    title: "Contact human support",
+    description:
+      "Emails the gateway's human support team on the person's behalf: a bug report, a question, or feedback. Only when the person asked you to contact support. First show them the exact message you will send and wait for their yes; send it in their words, as plainly as they would. Support replies to the person's own email address, never to you. Put what helps support act in context — app id, request id, error code, what was tried — and never a key, token or password: a message carrying one is refused. Sending the same message again within ten minutes sends nothing new and answers the first reference. Not for questions you can answer with the other tools or the guide.",
+    operation: "sendSupportMessage",
+    input: z.object({
+      kind: SupportMessageRequestSchema.shape.kind.meta({
+        description: "bug for something that is broken, support for a question or a request for help, feedback for an idea or a missing feature.",
+      }),
+      message: SupportMessageRequestSchema.shape.message,
+      context: SupportMessageRequestSchema.shape.context,
+    }),
+    // It reaches a person outside the gateway, and each call that is not a
+    // repeat sends a new email; it removes nothing.
+    annotations: {
+      ...writing("contact_support", "sendSupportMessage", { destructive: false, idempotent: false }),
+      openWorldHint: true,
+    },
+    available: (scope) => supportInbox(scope.env, scope.deployment) !== null,
+    next: {
+      support_plan_required: "Tell the person that human support is included with paid plans, and that an account owner can choose one on the Billing page of the console. Do not retry.",
+      invalid_request: "Remove whatever looks like a credential, show the person the corrected message, and send it only once they agree.",
+      not_found: "This deployment does not offer human support. Tell the person.",
+      conflict: "The credential's owner has no email address for support to reply to. Ask the person to contact support from the console instead.",
+      rate_limited: "Too many messages were sent. Tell the person, and do not retry until the wait the message names has passed.",
+    },
+    call: (input) => operationCall("sendSupportMessage", {}, {
+      kind: input.kind,
+      message: input.message,
+      ...(input.context === undefined ? {} : { context: input.context }),
+    }),
+    summary: (raw) => {
+      const result = raw as OperationResponse<"sendSupportMessage">;
+      return result.duplicate
+        ? `This message was already sent as ${result.reference} in the last ten minutes; nothing new was sent. Support will reply to ${result.replyTo} by email.`
+        : `Sent to human support as ${result.reference}. Support will reply to ${result.replyTo} by email; tell the person the reference.`;
     },
   },
 ];

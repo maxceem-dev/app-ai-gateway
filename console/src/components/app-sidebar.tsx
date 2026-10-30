@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useMatch, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -35,7 +35,7 @@ import { AllowanceBar } from "@/components/allowance-bar";
 import { Brand } from "@/components/brand";
 import { GettingStarted } from "@/components/getting-started";
 import { OrganizationMenuItems } from "@/components/org-switcher";
-import { SUPPORT_KINDS, SupportDialog, useSupportAvailable } from "@/components/support-dialog";
+import { SUPPORT_KINDS, SUPPORT_MESSAGE_ID, SupportDialog, useSupportAvailable } from "@/components/support-dialog";
 import { AppStatusBadge } from "@/components/status-badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { APP_SECTIONS } from "@/lib/app-sections";
@@ -245,6 +245,13 @@ function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
   const signOut = useSignOut();
   const supportAvailable = useSupportAvailable();
   const [support, setSupport] = useState<SupportMessageKind | null>(null);
+  // Set when a support item is chosen, read once the menu has closed: a ref,
+  // because the menu finishes closing after the render that opened the dialog.
+  const openingSupport = useRef(false);
+  const chooseSupport = (kind: SupportMessageKind) => {
+    openingSupport.current = true;
+    setSupport(kind);
+  };
 
   const logout = async () => {
     await signOut.mutateAsync().catch(() => undefined);
@@ -279,6 +286,15 @@ function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
           align="start"
           sideOffset={8}
           className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
+          // The menu hands focus back to its trigger once it has closed, after
+          // the support dialog it opened took focus. Send it to the message
+          // instead: the last move wins, whatever the animations' timing.
+          onCloseAutoFocus={(event) => {
+            if (!openingSupport.current) return;
+            openingSupport.current = false;
+            event.preventDefault();
+            document.getElementById(SUPPORT_MESSAGE_ID)?.focus();
+          }}
         >
           <DropdownMenuItem asChild>
             <Link to="/settings" onClick={onNavigate}>
@@ -304,7 +320,7 @@ function UserMenu({ onNavigate }: { onNavigate?: () => void }) {
           {supportAvailable ? (
             <>
               <DropdownMenuSeparator />
-              <SupportMenu onChoose={setSupport} />
+              <SupportMenu onChoose={chooseSupport} />
             </>
           ) : null}
           <DropdownMenuSeparator />

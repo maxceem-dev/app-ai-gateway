@@ -49,16 +49,22 @@ export const SUPPORT_KINDS: Record<
   },
 };
 
+/** The message field's id, so the menu that opens the dialog can focus it. */
+export const SUPPORT_MESSAGE_ID = "support-message";
+
 /**
  * Whether the Support menu is offered: the deployment names a support inbox,
- * and the organization holds a plan that is not the free default. The gateway
- * refuses everyone else the same way, so this only keeps the menu from
- * offering what would be refused.
+ * and the organization holds a plan that is not the free default, or billing
+ * cannot be reached just now, when the gateway still accepts a message. The
+ * gateway refuses everyone else the same way, so this only keeps the menu
+ * from offering what would be refused.
  */
 export function useSupportAvailable(): boolean {
   const { capabilities, billing } = useConsoleSession();
+  if (!capabilities.supportEmail) return false;
+  if (billing?.state === "unavailable") return true;
   const plan = entitledPlan(billing);
-  return Boolean(capabilities.supportEmail) && plan !== null && !plan.isDefault;
+  return plan !== null && !plan.isDefault;
 }
 
 /**
@@ -76,9 +82,9 @@ function mailtoHref(inbox: string, topic: string, message: string): string {
 /**
  * A message to support, written without leaving the console.
  *
- * It arrives in the support inbox as an email whose reply-to is the person's
- * own address, so the answer comes back to them by email and the conversation
- * carries on there. The page it was written from goes with it.
+ * The person gets an email with its reference and their message, copied to
+ * the support inbox, so the answer comes back to them by email and the
+ * conversation carries on there. The page it was written from goes with it.
  */
 export function SupportDialog({
   kind,
@@ -104,7 +110,7 @@ export function SupportDialog({
         message: message.trim(),
         page: location.pathname,
       });
-      toast.success("Message sent", { description: `We'll reply to ${result.replyTo}.` });
+      toast.success(`Message sent (${result.reference})`, { description: "We'll reply to your email." });
       setMessage("");
       onOpenChange(false);
     } catch (error) {
@@ -127,14 +133,21 @@ export function SupportDialog({
     >
       {email ? (
         // Shown as a field, not editable: replies go to the sign-in's own
-        // address, which is the one the gateway sends as reply-to.
+        // address, which is the one the ticket is opened for. Out of the tab
+        // order, so the dialog opens with the message focused instead.
         <Field label="From" htmlFor="support-from" hint={copy.replyHint}>
-          <Input id="support-from" value={email} readOnly className="bg-muted/50 text-muted-foreground" />
+          <Input
+            id="support-from"
+            value={email}
+            readOnly
+            tabIndex={-1}
+            className="bg-muted/50 text-muted-foreground"
+          />
         </Field>
       ) : null}
       <Field
         label="Message"
-        htmlFor="support-message"
+        htmlFor={SUPPORT_MESSAGE_ID}
         hint={
           capabilities.supportEmail ? (
             <>
@@ -151,11 +164,12 @@ export function SupportDialog({
         }
       >
         <Textarea
-          id="support-message"
+          id={SUPPORT_MESSAGE_ID}
           value={message}
           placeholder={copy.message}
           maxLength={10_000}
           autoFocus
+          disabled={send.isPending}
           className="min-h-64 resize-y"
           onChange={(event) => setMessage(event.target.value)}
         />
