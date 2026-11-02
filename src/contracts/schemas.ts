@@ -15,6 +15,7 @@ import {
 } from "../shared/gateways.ts";
 import { PROVIDER_CREDENTIAL_HEADERS, PROVIDER_TYPES } from "../shared/providers.ts";
 import { APP_STATUSES } from "../shared/app-status.ts";
+import { LONG_RATE_FIELDS, TOKEN_RATE_FIELDS, type TokenRateField } from "../shared/token-rates.ts";
 
 /**
  * The vocabulary an application configuration is written in.
@@ -697,16 +698,38 @@ export const UsageRepriceRequestSchema = z.object({
   apply: z.boolean().default(false),
 }).strict().meta({ id: "UsageRepriceRequest" });
 
+const TokenRateSchema = z.number().finite().nonnegative();
+
+/**
+ * Every rate but input and output, optional, named by the one list the cost
+ * arithmetic reads — so a rate the gateway learns to bill is overridable the
+ * moment it exists, and nothing else is ever stored.
+ */
+const OPTIONAL_TOKEN_RATES = Object.fromEntries(
+  TOKEN_RATE_FIELDS
+    .filter((field) => field !== "input" && field !== "output")
+    .map((field) => [field, TokenRateSchema.optional()]),
+) as Record<Exclude<TokenRateField, "input" | "output">, z.ZodOptional<typeof TokenRateSchema>>;
+
 /**
  * Per-1M-token overrides for models the shipped catalog does not cover, or
  * covers with a stale price. `$0` is enterable for genuinely free models.
+ * Input and output are required; every other rate is optional and, left out,
+ * falls back as it does on a catalog entry without it — an override replaces
+ * the catalog's rates for its model, it never inherits them.
  */
 export const ProviderPricingSchema = z.record(
   z.string().trim().min(1).max(200),
   z.object({
-    input: z.number().finite().nonnegative(),
-    output: z.number().finite().nonnegative(),
-  }).strict(),
+    input: TokenRateSchema,
+    output: TokenRateSchema,
+    ...OPTIONAL_TOKEN_RATES,
+    long_context_threshold: z.number().int().positive().optional(),
+  }).strict().refine(
+    (price) => price.long_context_threshold !== undefined
+      || LONG_RATE_FIELDS.every((field) => price[field] === undefined),
+    { message: "Long-context rates need long_context_threshold" },
+  ),
 ).meta({ id: "ProviderPricing" });
 
 const ProviderNameSchema = z.string().trim().min(1).max(100);

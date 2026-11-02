@@ -271,8 +271,16 @@ a slug, or the create answers `409 slug_taken`.
 `pricing` is per model, in USD per million tokens:
 
 ```json
-{ "my-model": { "input": 0.5, "output": 1.5 } }
+{ "my-model": { "input": 0.5, "output": 1.5, "cached_input": 0.05 } }
 ```
+
+`input` and `output` are required. Any other per-token rate the catalog uses
+is optional under the same name: `cached_input`, `cache_write`,
+`cache_write_1h`, `image_input`, `audio_input`, `video_input`,
+`image_output`, and the `long_*` rates, which also need
+`long_context_threshold`. A custom price replaces the catalog's rates for that
+model and inherits none of them: a rate left out bills as on a catalog entry
+without it, so a cache rate falls back to `input`.
 
 A model that is in neither the built-in catalog (`GET /v1/admin/prices`)
 nor the provider's `pricing` cannot be used by any app: requests answer

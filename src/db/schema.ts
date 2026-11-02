@@ -18,6 +18,7 @@ import type { GatewayConnectionConfig, GatewayType } from "../shared/gateways";
 import type { AppConfig } from "../shared/app-config";
 import type { AppStatus } from "../shared/app-status";
 import type { ProviderType } from "../shared/providers";
+import type { TokenPrice, TokenVariants } from "../shared/token-rates";
 
 export type UserStatus = "active" | "blocked";
 export type AttestEnvironment = "production" | "development";
@@ -58,8 +59,13 @@ export interface GatewayRouteConfig {
   /** Serving providers the gateway may pick from, where it supports pinning. */
   providerOnly?: string[];
 }
-/** Per-1M-token overrides for models the shipped catalog does not cover. */
-export type ProviderPricing = Record<string, { input: number; output: number }>;
+/**
+ * Per-1M-token overrides for models the shipped catalog does not cover, or
+ * covers at a price this provider does not charge. An entry replaces the
+ * catalog's rates for its model outright; see `modelPrice` in
+ * `src/usage/pricing.ts`.
+ */
+export type ProviderPricing = Record<string, TokenPrice>;
 /**
  * Where a proxied request's `cost_usd` came from. `reported` is the upstream's
  * own figure for that request, which outranks a local estimate because it is
@@ -398,6 +404,14 @@ export const appUsageEvent = sqliteTable(
      * column existed.
      */
     modalityTokens: text("modality_tokens", { mode: "json" }).$type<ModalityTokens>(),
+    /**
+     * The parts of a token bucket the response split out to bill at a rate of
+     * their own, as JSON `{ cache_write?: { "1h"?: n } }` — see `TOKEN_VARIANTS`
+     * in `src/shared/token-rates.ts`. Every such split shares this one column,
+     * so a new one never adds another. `{}` where the response split nothing;
+     * null only on rows recorded before the column existed.
+     */
+    tokenVariants: text("token_variants", { mode: "json" }).$type<TokenVariants>(),
     costUsd: real("cost_usd").notNull().default(0),
     /**
      * How `cost_usd` was arrived at, for events that reached a provider. Deliberately unconstrained text: the value set grows as new cost sources land, and a

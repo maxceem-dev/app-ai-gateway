@@ -261,8 +261,12 @@ export function UsageTab({
               <TableRow className="hover:bg-transparent">
                 <TableHead>{dimension}</TableHead>
                 <TableHead className="text-right">Requests</TableHead>
-                <TableHead className="text-right">Input</TableHead>
+                {/* Input is every prompt token, cached and cache-written ones
+                    included, which is what the two columns after it are a
+                    share of. */}
+                <TableHead className="text-right">Total input</TableHead>
                 <TableHead className="text-right">Cached input</TableHead>
+                <TableHead className="text-right">Cache write</TableHead>
                 <TableHead className="text-right">Output</TableHead>
                 <TableHead className="text-right">Cost</TableHead>
               </TableRow>
@@ -270,13 +274,13 @@ export function UsageTab({
             <TableBody>
               {breakdown.isPending ? (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                     <Skeleton className="h-8 w-full" />
                   </TableCell>
                 </TableRow>
               ) : breakdown.data?.rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                     Nothing recorded in this range.
                   </TableCell>
                 </TableRow>
@@ -301,6 +305,7 @@ export function UsageTab({
                         {formatPercent(cachedInputRate(row))} of input
                       </span>
                     </TableCell>
+                    <TableCell className="tabular text-right">{formatCompact(row.cache_write_tokens)}</TableCell>
                     <TableCell className="tabular text-right">{formatCompact(row.output_tokens)}</TableCell>
                     <TableCell className="tabular text-right">{formatCost(row.cost_usd)}</TableCell>
                   </TableRow>

@@ -147,11 +147,11 @@ test("openai: fails on an image table it was not written against", () => {
   assertFails(parseOpenai, replaceOnce(text, "| gpt-image-2 | Text | $5.00 | - | $1.25 |\n", ""), wanted, /both a Text and an Image row/);
 });
 
-test("anthropic: reads display names, footnotes and the 5-minute cache write", () => {
+test("anthropic: reads display names, footnotes and both cache-write durations", () => {
   const prices = parse(parseAnthropic, fixture("anthropic.md"), ["claude-mythos-5", "claude-sonnet-5", "claude-haiku-4-5"]);
-  assert.deepEqual(prices.get("claude-mythos-5"), { input: 10, cached_input: 1, cache_write: 12.5, output: 50 });
-  assert.deepEqual(prices.get("claude-sonnet-5"), { input: 2, cached_input: 0.2, cache_write: 2.5, output: 10 });
-  assert.deepEqual(prices.get("claude-haiku-4-5"), { input: 1, cached_input: 0.1, cache_write: 1.25, output: 5 });
+  assert.deepEqual(prices.get("claude-mythos-5"), { input: 10, cached_input: 1, cache_write: 12.5, cache_write_1h: 20, output: 50 });
+  assert.deepEqual(prices.get("claude-sonnet-5"), { input: 2, cached_input: 0.2, cache_write: 2.5, cache_write_1h: 4, output: 10 });
+  assert.deepEqual(prices.get("claude-haiku-4-5"), { input: 1, cached_input: 0.1, cache_write: 1.25, cache_write_1h: 2, output: 5 });
   assert.equal(prices.get("claude-opus-5-5"), null);
   assert.equal(prices.get("claude-opus-4-1"), null);
 });
@@ -171,11 +171,13 @@ test("anthropic: pairs prompt-length rows into long-context prices", () => {
     input: 0.1,
     cached_input: 0.01,
     cache_write: 0.125,
+    cache_write_1h: 0.2,
     output: 0.5,
     long_context_threshold: 100000,
     long_input: 0.5,
     long_cached_input: 0.05,
     long_cache_write: 0.625,
+    long_cache_write_1h: 1,
     long_output: 2.5,
   });
   assert.equal(parse(parseAnthropic, text, ["claude-haiku-4-5"]).get("claude-haiku-5-5"), null);
@@ -524,6 +526,7 @@ test("effective prices follow computeCost's fallbacks", () => {
       output: 2,
       cached_input: 0.1,
       cache_write: 1,
+      cache_write_1h: 1,
       image_input: 1,
       audio_input: 1,
       video_input: 1,
@@ -532,6 +535,7 @@ test("effective prices follow computeCost's fallbacks", () => {
       long_output: 2,
       long_cached_input: 0.1,
       long_cache_write: 2,
+      long_cache_write_1h: 2,
     },
   );
   assert.ok(!samePrice({ input: 1, output: 2 }, { input: 1, output: 2, long_context_threshold: 1000 }));

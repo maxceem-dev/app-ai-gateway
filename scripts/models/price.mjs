@@ -13,6 +13,7 @@ export const PRICE_FIELDS = [
   "input",
   "cached_input",
   "cache_write",
+  "cache_write_1h",
   "output",
   "image_input",
   "audio_input",
@@ -21,6 +22,7 @@ export const PRICE_FIELDS = [
   "long_input",
   "long_cached_input",
   "long_cache_write",
+  "long_cache_write_1h",
   "long_output",
 ];
 
@@ -101,6 +103,8 @@ export function effectivePrice(price) {
     output: round6(price.output),
     cached_input: round6(price.cached_input ?? price.input),
     cache_write: round6(price.cache_write ?? price.input),
+    // A variant of the cache write: unpriced, it bills as the write does.
+    cache_write_1h: round6(price.cache_write_1h ?? price.cache_write ?? price.input),
     image_input: round6(price.image_input ?? price.input),
     audio_input: round6(price.audio_input ?? price.input),
     video_input: round6(price.video_input ?? price.input),
@@ -111,7 +115,9 @@ export function effectivePrice(price) {
     effective.long_input = round6(longInput);
     effective.long_output = round6(price.long_output ?? price.output);
     effective.long_cached_input = round6(price.long_cached_input ?? price.cached_input ?? longInput);
-    effective.long_cache_write = round6(price.long_cache_write ?? price.cache_write ?? longInput);
+    const longCacheWrite = price.long_cache_write ?? price.cache_write ?? longInput;
+    effective.long_cache_write = round6(longCacheWrite);
+    effective.long_cache_write_1h = round6(price.long_cache_write_1h ?? price.cache_write_1h ?? longCacheWrite);
   }
   return effective;
 }

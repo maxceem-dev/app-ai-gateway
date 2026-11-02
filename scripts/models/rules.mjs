@@ -37,6 +37,7 @@ const LABELS = {
   input: "input",
   cached_input: "cached",
   cache_write: "cache write",
+  cache_write_1h: "1h cache write",
   output: "output",
   image_input: "image input",
   audio_input: "audio input",
@@ -45,6 +46,7 @@ const LABELS = {
   long_input: "long input",
   long_cached_input: "long cached",
   long_cache_write: "long cache write",
+  long_cache_write_1h: "long 1h cache write",
   long_output: "long output",
 };
 

@@ -15,6 +15,13 @@ import type { ProviderPricing } from "../db/schema";
 import { type ProviderType, reportsCost } from "../shared/providers";
 import type { ApiStyle, ProviderRoute } from "../shared/capabilities";
 import { type KindCatalog, type ModelKind, modelKind } from "../shared/model-kinds";
+import {
+  TOKEN_RATE_FIELDS,
+  TOKEN_VARIANTS,
+  type TokenVariants,
+  type VariantBucket,
+  type VariantRateField,
+} from "../shared/token-rates";
 
 interface Price {
   /** What the model does, which decides the custom endpoints it may serve. */
@@ -35,6 +42,12 @@ interface Price {
   image_output?: number;
   cached_input?: number;
   cache_write?: number;
+  /**
+   * What a cache write kept for an hour costs, where the provider charges it
+   * apart from the default write — Anthropic bills 2x input against 1.25x.
+   * A variant of `cache_write`; see `TOKEN_VARIANTS`.
+   */
+  cache_write_1h?: number;
   per_minute?: number;
   per_hour?: number;
   /**
@@ -49,6 +62,7 @@ interface Price {
   long_output?: number;
   long_cached_input?: number;
   long_cache_write?: number;
+  long_cache_write_1h?: number;
   /**
    * Who made the model, where the catalog knows better than the provider type
    * does — a Llama model served by Groq is Meta's. Curated per entry alongside
@@ -68,6 +82,8 @@ export interface UsageObservation extends UsageCounts {
   /** The images the response says it generated and billed, for a per-image model. */
   images?: number;
   modalityTokens?: ModalityTokens;
+  /** The parts of a bucket the response split out to bill apart; see `TOKEN_VARIANTS`. */
+  tokenVariants?: TokenVariants;
   /**
    * Set when the response reported a duration and no token counts, so its
    * zeroed counters are absent rather than a measured zero. Only a transcription
@@ -104,6 +120,12 @@ function catalogPrice(provider: ProviderType, model: string): Price | undefined 
  * Model pricing is a two-level lookup: the resolved provider row's own
  * overrides win, then the deployment-global catalog. A model priced by neither
  * never proxies unless its route reports cost, so `cost_usd` is never NULL.
+ *
+ * An override replaces the catalog's rates rather than merging over them: a
+ * provider that resells a model at its own input and output price has not said
+ * it passes on the catalog's cache discount, so a rate the override leaves out
+ * falls back as it would on a catalog entry without it, never to the catalog's
+ * figure. Only the model's kind still comes from the catalog.
  */
 function modelPrice(
   provider: ProviderType,
@@ -112,11 +134,17 @@ function modelPrice(
 ): Price | undefined {
   const override = lookup(overrides, model);
   if (override) {
-    return {
-      kind: catalogKind(provider, model, overrides) ?? "text",
-      input: override.input,
-      output: override.output,
-    };
+    const price: Price = { kind: catalogKind(provider, model, overrides) ?? "text" };
+    // Copied field by field from the list the override schema was built from,
+    // so a stored row can never carry anything else into the arithmetic.
+    for (const field of TOKEN_RATE_FIELDS) {
+      const rate = override[field];
+      if (typeof rate === "number") price[field] = rate;
+    }
+    if (typeof override.long_context_threshold === "number") {
+      price.long_context_threshold = override.long_context_threshold;
+    }
+    return price;
   }
   return catalogPrice(provider, model);
 }
@@ -314,7 +342,50 @@ export function computeCost(
   return (
     sideCost(usage.inputTokens, inputPrice, modalityRates(price, INPUT_RATES), usage.modalityTokens?.input) +
     usage.cachedInputTokens * cachedPrice +
-    usage.cacheWriteTokens * cacheWritePrice +
+    variantCost("cache_write", usage.cacheWriteTokens, cacheWritePrice, price, longContext, usage.tokenVariants) +
     sideCost(usage.outputTokens, outputPrice, modalityRates(price, OUTPUT_RATES), usage.modalityTokens?.output)
   ) / 1_000_000;
+}
+
+/**
+ * A variant count as something safe to bill: a stored row is JSON, and a
+ * negative, fractional or non-numeric figure must never lower a cost.
+ */
+function variantCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
+}
+
+/**
+ * What one bucket's tokens cost when the response split some of them out as
+ * variants billed at their own rate. The variants are taken out of the bucket
+ * in a fixed order and never past it, so together they can claim no more than
+ * the bucket holds and no token bills twice; the rest bills at `base`, the
+ * bucket's own rate.
+ *
+ * A variant's rate falls back like every other rate here: the long-context
+ * variant to the variant, and an unpriced variant to the bucket's rate. That
+ * is the same figure the request would have cost before the variant was read,
+ * so a catalog that has not priced a variant yet bills as it always did.
+ */
+function variantCost(
+  bucket: VariantBucket,
+  tokens: number,
+  base: number,
+  price: Price,
+  longContext: boolean,
+  variants: TokenVariants | undefined,
+): number {
+  const counts: Partial<Record<string, unknown>> | undefined = variants?.[bucket];
+  if (!counts) return tokens * base;
+  let rest = tokens;
+  let cost = 0;
+  for (const name of TOKEN_VARIANTS[bucket]) {
+    const billed = Math.min(rest, variantCount(counts[name]));
+    if (billed === 0) continue;
+    const field: VariantRateField = `${bucket}_${name}`;
+    const rate = (longContext ? price[`long_${field}`] : undefined) ?? price[field] ?? base;
+    cost += billed * rate;
+    rest -= billed;
+  }
+  return cost + rest * base;
 }

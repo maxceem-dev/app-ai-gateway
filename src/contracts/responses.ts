@@ -980,6 +980,9 @@ export const ModelPriceSchema = z.object({
   }),
   cached_input: z.number().optional(),
   cache_write: z.number().optional(),
+  cache_write_1h: z.number().optional().meta({
+    description: "USD per 1M tokens written to a one-hour cache, where it costs more than the default cache write.",
+  }),
   per_minute: z.number().optional(),
   per_hour: z.number().optional(),
   per_image: z.number().optional().meta({
@@ -990,6 +993,7 @@ export const ModelPriceSchema = z.object({
   long_output: z.number().optional(),
   long_cached_input: z.number().optional(),
   long_cache_write: z.number().optional(),
+  long_cache_write_1h: z.number().optional(),
   retirement_date: z.string().optional().meta({
     description:
       "The day (YYYY-MM-DD) the provider stops, or stopped, serving this model. The model stays priced after it.",

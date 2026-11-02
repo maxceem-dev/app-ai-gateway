@@ -40,6 +40,14 @@ be right for them: **Fireworks AI** names models per account, and
 **Hugging Face** re-prices the same model ID on every upstream its router might
 pick. Their models proxy once you price them, and not before.
 
+### Prompt cache writes
+
+Anthropic charges more for a cache write kept for an hour than for one kept
+the default five minutes: 2x the input price against 1.25x. Its responses say
+how many written tokens were kept for each, and the gateway bills each share
+at its own rate (`cache_write_1h` and `cache_write` in the catalog). If a
+response gives no split, every written token bills at the five-minute rate.
+
 ### Image generation models
 
 The catalog covers image models that are priced per token, with separate
@@ -102,35 +110,47 @@ catalog does not cover, or prices it in a way you disagree with. Requests for
 unpriced models are rejected until a price is set here. Enter $0 for a model
 that is genuinely free."
 
-Click **Add model** for each row and fill in three columns:
+Click **Add model** for each row and fill in its columns:
 
 | Column | Meaning |
 | --- | --- |
 | **Model** | The model ID exactly as your app sends it, for example `gpt-brand-new`. |
 | **Input $/1M** | Price per million input tokens. |
 | **Output $/1M** | Price per million output tokens. |
+| **Cached $/1M** | Optional. Price per million input tokens served from the provider's prompt cache. |
+| **Cache write $/1M** | Optional. Price per million input tokens written to the provider's prompt cache. |
 
-Then **Save pricing**. Every row needs a model name and both prices, as
-numbers of zero or more. A model cannot appear twice. A row left entirely blank
-is dropped, so a spare one does no harm. Custom prices are ordinary data, not
+Then **Save pricing**. Every row needs a model name and the input and output
+prices, as numbers of zero or more. A cache price left blank bills at the
+input price. A model cannot appear twice. A row left entirely blank is
+dropped, so a spare one does no harm. Custom prices are ordinary data, not
 secrets, so the dialog shows the stored values and anyone who can read the
 console can see them.
 
-Lookup is a two-level merge: the provider's own custom price for the requested
-model first, then the shipped catalog. A custom price therefore overrides the
-catalog for that provider only. Custom prices carry input and output rates
-only; a catalog entry's cached-input, long-context or image rates do not apply
-to a model you priced yourself. If you priced a model yourself before the
-catalog covered it, such as a GPT Image model, delete that custom price so the
-catalog's full rates apply.
+Lookup has two levels: the provider's own custom price for the requested
+model first, then the shipped catalog. A custom price replaces the catalog's
+rates for that model on that provider only. It does not inherit any of them: a
+rate you leave out bills as it would on a catalog entry without it (a cache
+rate at the input price, a long-context rate at the normal one), never at the
+catalog's figure. If the provider gives a cache discount, enter it, or cached
+traffic records at the full input price. If you priced a model yourself
+before the catalog covered it, such as a GPT Image model, delete that custom
+price so the catalog's full rates apply.
 
 The API equivalent sets `pricing` on the provider. It is a full replace, keyed
 by model ID, and `null` clears every custom price:
 
 ```json
 PUT /v1/admin/providers/{id}
-{ "pricing": { "gpt-brand-new": { "input": 1.25, "output": 10 } }, "revision": 7 }
+{ "pricing": { "gpt-brand-new": { "input": 1.25, "output": 10, "cached_input": 0.125 } }, "revision": 7 }
 ```
+
+Through the API, a custom price accepts every per-token rate the catalog
+uses, under the same names as in `GET /v1/admin/prices`: `cached_input`,
+`cache_write`, `cache_write_1h`, the image, audio and video rates, and the
+`long_*` rates. The `long_*` rates also need `long_context_threshold`, the
+prompt size in tokens above which they apply. The dialog shows the cache
+rates and keeps the others as they are when you save.
 
 The same field is accepted on `POST /v1/admin/providers` when you create the
 provider.

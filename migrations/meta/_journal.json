@@ -64,6 +64,13 @@
       "when": 1793421988024,
       "tag": "0008_cf_auth_0_10",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793510823564,
+      "tag": "0009_token_variants",
+      "breakpoints": true
     }
   ]
 }

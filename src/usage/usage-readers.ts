@@ -14,7 +14,8 @@ import { PROTOCOLS, type UsageFormat } from "../providers/protocols";
 import { type ObservedText, wholeBody } from "./body-observer";
 import { EMPTY_USAGE, type UsageObservation } from "./pricing";
 import { asRecord } from "../shared/records";
-import type { Modality, ModalityCounts, UsageCounts } from "../core/types";
+import type { Modality, ModalityCounts } from "../core/types";
+import type { TokenVariants } from "../shared/token-rates";
 import { type ProviderType, routeCostReport } from "../shared/providers";
 import type { ApiStyle, ProviderRoute } from "../shared/capabilities";
 
@@ -109,7 +110,20 @@ function openAiUsage(value: unknown): UsageObservation | null {
   };
 }
 
-function anthropicUsage(value: unknown): UsageCounts | null {
+/**
+ * The one-hour share of an Anthropic cache write, which bills at 2x input
+ * against 1.25x for the default five minutes. `usage.cache_creation` splits
+ * `cache_creation_input_tokens` by TTL; where it is absent, as on an older API
+ * version or a route that strips it, the whole write bills at the default rate,
+ * exactly as it did before the split was read.
+ */
+function anthropicCacheWriteVariants(usage: Record<string, unknown>): TokenVariants | undefined {
+  const creation = asRecord(usage.cache_creation);
+  if (!creation || finiteNumber(creation.ephemeral_1h_input_tokens) === null) return undefined;
+  return { cache_write: { "1h": numberAt(creation, "ephemeral_1h_input_tokens") } };
+}
+
+function anthropicUsage(value: unknown): UsageObservation | null {
   const root = asRecord(value);
   if (!root) return null;
   const message = asRecord(root.message) ?? root;
@@ -125,11 +139,13 @@ function anthropicUsage(value: unknown): UsageCounts | null {
   ) {
     return null;
   }
+  const tokenVariants = anthropicCacheWriteVariants(usage);
   return {
     inputTokens: numberAt(usage, "input_tokens"),
     cachedInputTokens: numberAt(usage, "cache_read_input_tokens"),
     cacheWriteTokens: numberAt(usage, "cache_creation_input_tokens"),
     outputTokens: numberAt(usage, "output_tokens"),
+    ...(tokenVariants && { tokenVariants }),
   };
 }
 
@@ -301,12 +317,18 @@ function sseEvents(text: string): {
  * `message_start` names the input tokens and `message_delta` the cumulative
  * output tokens, and neither may pull the other's counter back down.
  */
-function mergeAnthropicUsage(left: UsageCounts, right: UsageCounts): UsageCounts {
+function mergeAnthropicUsage(left: UsageObservation, right: UsageObservation): UsageObservation {
+  // The cache-write split is merged the same way as the counter it splits: an
+  // event that does not name it must not erase the one that did.
+  const oneHour = [left, right]
+    .map((usage) => usage.tokenVariants?.cache_write?.["1h"])
+    .filter((count): count is number => count !== undefined);
   return {
     inputTokens: Math.max(left.inputTokens, right.inputTokens),
     cachedInputTokens: Math.max(left.cachedInputTokens, right.cachedInputTokens),
     cacheWriteTokens: Math.max(left.cacheWriteTokens, right.cacheWriteTokens),
     outputTokens: Math.max(left.outputTokens, right.outputTokens),
+    ...(oneHour.length > 0 && { tokenVariants: { cache_write: { "1h": Math.max(...oneHour) } } }),
   };
 }
 
@@ -515,7 +537,7 @@ export function responseValues(body: ObservedText, contentType: string): Respons
  * event, so the head is walked forwards and stops on it — on a truncated body
  * as on an intact one, and never through the deltas in between.
  */
-function withMessageStart(counts: UsageCounts, values: ResponseValues): UsageCounts {
+function withMessageStart(counts: UsageObservation, values: ResponseValues): UsageObservation {
   let merged = counts;
   for (const value of values.headForwards()) {
     const earlier = anthropicUsage(value);

@@ -4,7 +4,7 @@ import { Route, Routes } from "react-router-dom";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ProvidersPage } from "./providers";
-import { draftsToPricing } from "@/lib/pricing-draft";
+import { draftsToPricing, toDrafts } from "@/lib/pricing-draft";
 import { renderAuthenticated } from "@/test/render";
 import type { AppSummary, ProviderCredential, ProviderGateway } from "@/lib/types";
 import { served } from "@/test/providers";
@@ -313,6 +313,34 @@ describe("draftsToPricing", () => {
       .toEqual({ error: "Prices for m must be numbers of 0 or more" });
     expect(draftsToPricing([{ model: "", input: "1", output: "2" }]))
       .toEqual({ error: "Every pricing row needs a model name" });
+    expect(draftsToPricing([{ model: "m", input: "1", output: "2", cacheWrite: "abc" }]))
+      .toEqual({ error: "Prices for m must be numbers of 0 or more" });
+  });
+
+  it("sends the cache prices that are filled in and leaves out the blank ones", () => {
+    expect(draftsToPricing([
+      { model: "a", input: "1", output: "2", cachedInput: "0.1", cacheWrite: "1.25" },
+      { model: "b", input: "1", output: "2", cachedInput: " ", cacheWrite: "" },
+    ])).toEqual({
+      pricing: {
+        a: { input: 1, output: 2, cached_input: 0.1, cache_write: 1.25 },
+        b: { input: 1, output: 2 },
+      },
+    });
+  });
+
+  it("keeps rates the form has no field for when the prices are saved again", () => {
+    const stored = {
+      m: {
+        input: 1,
+        output: 2,
+        cached_input: 0.1,
+        cache_write_1h: 2,
+        long_context_threshold: 200_000,
+        long_input: 2,
+      },
+    };
+    expect(draftsToPricing(toDrafts(stored))).toEqual({ pricing: stored });
   });
 });
 
