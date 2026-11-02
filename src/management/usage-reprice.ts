@@ -55,6 +55,7 @@ export async function repriceAppUsage(
       cacheWriteTokens: appUsageEvent.cacheWriteTokens,
       outputTokens: appUsageEvent.outputTokens,
       modalityTokens: appUsageEvent.modalityTokens,
+      tokenVariants: appUsageEvent.tokenVariants,
       costUsd: appUsageEvent.costUsd,
       pricing: providerTable.pricing,
     })
@@ -98,8 +99,16 @@ export async function repriceAppUsage(
     // its tokens were. Where the price depends on that, any figure would be a
     // guess, and the highest-rate one could multiply a text request's cost.
     const unrecorded = row.modalityTokens === null && pricesModalities(provider, model, row.pricing);
+    // A row recorded before token variants were kept is priced unsplit, every
+    // cache write at the default rate. Unlike a missing modality record that is
+    // no new guess: it is the assumption the row was recorded under, so its
+    // repriced cost moves only with the rates themselves.
     const costUsd = hasTokenModelPrice(provider, model, row.pricing) && !unrecorded
-      ? computeCost(provider, model, { ...row, modalityTokens: row.modalityTokens ?? undefined }, row.pricing)
+      ? computeCost(provider, model, {
+        ...row,
+        modalityTokens: row.modalityTokens ?? undefined,
+        tokenVariants: row.tokenVariants ?? undefined,
+      }, row.pricing)
       : null;
     if (costUsd === null) {
       if (apply) {

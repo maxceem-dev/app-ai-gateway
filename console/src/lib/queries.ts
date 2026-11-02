@@ -155,10 +155,18 @@ export function useSelectOrganization() {
   return useMutation({
     mutationFn: (organizationId: string) =>
       call("selectOrganization", { body: { organizationId } }),
-    onSuccess: (result) => {
-      // Every cached list is scoped to the previous organization.
-      client.clear();
+    onSuccess: async (result) => {
       client.setQueryData(keys.session, result.session);
+      // Every cached list is scoped to the previous organization, so its data
+      // is dropped. Reset rather than `clear()`: clearing removes the queries
+      // the mounted pages observe, which then keep rendering the previous
+      // organization's data and never fetch again. A reset empties them in
+      // place and refetches the ones on screen, under the new organization.
+      // The session was just replaced, and capabilities describe the
+      // deployment rather than an organization; resetting either would only
+      // blank the whole shell while it reloads.
+      const kept: readonly unknown[] = [keys.session[0], keys.capabilities[0]];
+      await client.resetQueries({ predicate: (query) => !kept.includes(query.queryKey[0]) });
     },
   });
 }

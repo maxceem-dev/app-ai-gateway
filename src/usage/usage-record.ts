@@ -189,6 +189,7 @@ export async function persistUsageEvent(env: Env, event: UsageEvent): Promise<vo
     cacheWriteTokens: event.row.cacheWriteTokens,
     outputTokens: event.row.outputTokens,
     modalityTokens: event.row.modalityTokens,
+    tokenVariants: event.row.tokenVariants,
     // Undefined for token-priced traffic, where JSON.stringify drops the field.
     audioSeconds: event.audioSeconds,
     images: event.images,
@@ -389,6 +390,9 @@ export async function recordUsageEvent(input: UsageEventInput): Promise<void> {
       // Never null on a new row: null is how a row recorded before the column
       // says nobody kept its breakdown, which repricing must not guess at.
       modalityTokens: usage.modalityTokens ?? {},
+      // The same rule: `{}` is "split nothing", null is "recorded before the
+      // split was kept".
+      tokenVariants: usage.tokenVariants ?? {},
       costUsd: cost,
       costSource,
       reportedCostUsd: reportedCost,

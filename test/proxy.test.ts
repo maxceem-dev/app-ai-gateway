@@ -1912,6 +1912,45 @@ describe("provider-native proxy", () => {
     );
   });
 
+  it("records an Anthropic one-hour cache write and bills it at its own rate", async () => {
+    const appId = "proxy-anthropic-cache-1h";
+    await seedApp(appId);
+    const token = await gatewayToken(appId);
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({
+      type: "message",
+      usage: {
+        input_tokens: 4,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 100,
+        cache_creation: { ephemeral_5m_input_tokens: 70, ephemeral_1h_input_tokens: 30 },
+        output_tokens: 3,
+      },
+    }));
+
+    const response = await proxyRequest({
+      appId,
+      token,
+      path: "anthropic/v1/messages",
+      body: { model: "claude-sonnet-5", messages: [], max_tokens: 32 },
+    });
+    await response.text();
+
+    expect(response.status).toBe(200);
+    await settleUsage();
+    const row = await env.DB.prepare(
+      "SELECT cache_write_tokens, token_variants, cost_usd FROM app_usage_event WHERE app_id = ?",
+    )
+      .bind(appId)
+      .first<{ cache_write_tokens: number; token_variants: string | null; cost_usd: number }>();
+    expect(row?.cache_write_tokens).toBe(100);
+    expect(JSON.parse(row!.token_variants!)).toEqual({ cache_write: { "1h": 30 } });
+    const sonnet = shippedRates("anthropic", "claude-sonnet-5");
+    expect(row?.cost_usd).toBeCloseTo(
+      (4 * sonnet.input + 70 * sonnet.cache_write + 30 * sonnet.cache_write_1h + 3 * sonnet.output) / 1e6,
+      12,
+    );
+  });
+
   it("bills a BytePlus Seedream request per generated image", async () => {
     const appId = "proxy-seedream";
     await seedApp(appId, {

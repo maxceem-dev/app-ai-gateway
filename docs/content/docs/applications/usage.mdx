@@ -30,7 +30,10 @@ A table over the same range, grouped by one dimension:
 | **By endpoint** | Each custom endpoint |
 | **By app version** | The `X-App-Version` header, so you can see whether a problem is one release |
 
-Columns are **Requests**, **Input**, **Cached input**, **Output** and **Cost**.
+Columns are **Requests**, **Total input**, **Cached input**, **Cache write**,
+**Output** and **Cost**. **Total input** counts every prompt token, including
+those read from or written to the provider's prompt cache, so the two cache
+columns are shares of it.
 
 Model, provider and status breakdowns reach back over the whole history. The
 other dimensions come from the raw event log, which is kept for a bounded

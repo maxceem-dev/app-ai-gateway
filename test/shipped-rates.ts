@@ -16,6 +16,7 @@ export interface ShippedRates {
   image_output: number;
   cached_input: number;
   cache_write: number;
+  cache_write_1h: number;
   per_minute: number;
   per_hour: number;
   per_image: number;
@@ -24,6 +25,7 @@ export interface ShippedRates {
   long_output: number;
   long_cached_input: number;
   long_cache_write: number;
+  long_cache_write_1h: number;
 }
 
 /**

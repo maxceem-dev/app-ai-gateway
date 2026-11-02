@@ -1,8 +1,9 @@
 // https://platform.claude.com/docs/en/about-claude/pricing.md
 //
 // The first table under "## Model pricing". Rows are display names, so
-// "Claude Opus 4.5" is read as `claude-opus-4-5`. The 1h cache-write column is
-// not read: the catalog prices the default 5-minute write. A model priced by
+// "Claude Opus 4.5" is read as `claude-opus-4-5`. The 5m cache-write column is
+// `cache_write` and the 1h one `cache_write_1h`, which bills the share of a
+// write the response reports as kept for an hour. A model priced by
 // prompt length has two adjacent rows, "(for prompts up to N tokens)" and
 // "(for prompts over N tokens)", read as one price with long-context fields.
 
@@ -39,6 +40,7 @@ function tokenPrices(row, where) {
     input: price(row[1], where),
     cached_input: price(row[4], where),
     cache_write: price(row[2], where),
+    cache_write_1h: price(row[3], where),
     output: price(row[5], where),
   };
 }
@@ -80,6 +82,7 @@ export function parseAnthropic(text, { wanted }) {
       tokens.long_input = longTokens.input;
       tokens.long_cached_input = longTokens.cached_input;
       tokens.long_cache_write = longTokens.cache_write;
+      tokens.long_cache_write_1h = longTokens.cache_write_1h;
       tokens.long_output = longTokens.output;
     }
     put(prices, id, tokens);

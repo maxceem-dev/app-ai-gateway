@@ -1,0 +1,1 @@
+ALTER TABLE `app_usage_event` ADD `token_variants` text;

@@ -105,7 +105,7 @@ export function PricingDialog({
         }
       }}
     >
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Custom model pricing</DialogTitle>
         </DialogHeader>
@@ -113,7 +113,8 @@ export function PricingDialog({
           <DialogDescription>
             For models the built-in catalog does not cover, or prices it in a way you disagree with.
             {provider ? ` ${pricingNote(provider)}` : null}{" "}
-            Enter $0 for a model that is genuinely free.
+            Enter $0 for a model that is genuinely free. A cache price left blank bills at the
+            input price.
           </DialogDescription>
           {drafts.length === 0 ? (
             <EmptyState>No custom prices for this provider.</EmptyState>
@@ -124,15 +125,17 @@ export function PricingDialog({
                   accessible name. */}
               <div
                 aria-hidden
-                className="grid grid-cols-[2fr_1fr_1fr_auto] gap-2 text-xs text-muted-foreground"
+                className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-2 text-xs text-muted-foreground"
               >
                 <span>Model</span>
                 <span>Input $/1M</span>
                 <span>Output $/1M</span>
+                <span>Cached $/1M</span>
+                <span>Cache write $/1M</span>
                 <span className="w-9" />
               </div>
               {drafts.map((row, index) => (
-                <div key={index} className="grid grid-cols-[2fr_1fr_1fr_auto] items-center gap-2">
+                <div key={index} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-center gap-2">
                   <Input
                     aria-label={`Model ${index + 1}`}
                     value={row.model}
@@ -156,6 +159,22 @@ export function PricingDialog({
                     disabled={readOnly}
                     onChange={(event) => setRow(index, { output: event.target.value })}
                   />
+                  <Input
+                    aria-label={`Cached input price ${index + 1}`}
+                    inputMode="decimal"
+                    value={row.cachedInput ?? ""}
+                    placeholder="= input"
+                    disabled={readOnly}
+                    onChange={(event) => setRow(index, { cachedInput: event.target.value })}
+                  />
+                  <Input
+                    aria-label={`Cache write price ${index + 1}`}
+                    inputMode="decimal"
+                    value={row.cacheWrite ?? ""}
+                    placeholder="= input"
+                    disabled={readOnly}
+                    onChange={(event) => setRow(index, { cacheWrite: event.target.value })}
+                  />
                   <Button
                     variant="ghost"
                     size="icon"
@@ -175,7 +194,7 @@ export function PricingDialog({
             variant="outline"
             size="sm"
             disabled={readOnly}
-            onClick={() => setDrafts((current) => [...current, { model: "", input: "", output: "" }])}
+            onClick={() => setDrafts((current) => [...current, { model: "", input: "", output: "", cachedInput: "", cacheWrite: "" }])}
           >
             <Plus className="size-4" />
             Add model
