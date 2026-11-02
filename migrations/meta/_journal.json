@@ -71,6 +71,13 @@
       "when": 1793510823564,
       "tag": "0009_token_variants",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793591928583,
+      "tag": "0010_usage_day_totals",
+      "breakpoints": true
     }
   ]
 }

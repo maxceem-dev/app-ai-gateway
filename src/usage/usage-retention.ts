@@ -160,6 +160,133 @@ function dayBefore(now: number, days: number): string {
 }
 
 /**
+ * Days one sealing batch sums at most.
+ *
+ * A healthy night seals one day. This bounds the catch-up after nights that
+ * failed, so a week's backlog is a statement of ordinary size rather than one
+ * that could reach D1's 30s statement limit on a busy deployment.
+ */
+export const SEAL_DAYS_PER_BATCH = 7;
+
+/** Statements sealing may issue in a night: the window read and two batches. */
+export const SEAL_QUERY_BUDGET = 7;
+
+/** Statements one sealing batch issues: move the window, drop below the floor, sum. */
+const SEAL_STATEMENTS = 3;
+
+/**
+ * Moves the window from the bounds this run read to the new ones, and fails
+ * the whole batch if the window is no longer what was read.
+ *
+ * Runs first in its batch, so a stale run — two overlapping, the second
+ * reading the window before the first moved it — rolls back before it deletes
+ * or sums anything. A stale window cannot just be skipped: its batch may have
+ * an empty range to sum, so nothing else in it would conflict, and moving the
+ * window back would strand the other run's day rows past `sealed_until`, read
+ * there and again as raw events. The failure is the window's own order check:
+ * a stale row is given bounds that cannot satisfy it.
+ */
+const MOVE_WINDOW = `
+UPDATE app_usage_day_window SET
+  sealed_from = CASE WHEN sealed_from = ?3 AND sealed_until = ?4 THEN ?1 ELSE '~' END,
+  sealed_until = CASE WHEN sealed_from = ?3 AND sealed_until = ?4 THEN ?2 ELSE '' END
+WHERE id = 1`;
+
+/**
+ * Sums a range of days into `app_usage_day`.
+ *
+ * Through `idx_usage_event_account_created`, one range per account: events
+ * carry no index on `created_at` alone, and adding one would cost every
+ * proxied request a write. The guard trigger refuses an event whose account
+ * is gone, so every event has an account here to be found under.
+ *
+ * A plain insert, not an upsert: days at or past `sealed_until` never have a
+ * row, so a conflict means a row exists where none may, and failing the batch
+ * is right where adding to the row would double count.
+ */
+const SEAL_DAYS = `
+INSERT INTO app_usage_day (app_id, day, organization_id, requests, input_tokens, cached_input_tokens, cache_write_tokens, output_tokens, cost_usd, errors)
+SELECT
+  app_id,
+  substr(created_at, 1, 10),
+  organization_id,
+  COUNT(*),
+  COALESCE(SUM(input_tokens), 0),
+  COALESCE(SUM(cached_input_tokens), 0),
+  COALESCE(SUM(cache_write_tokens), 0),
+  COALESCE(SUM(output_tokens), 0),
+  COALESCE(SUM(cost_usd), 0),
+  COALESCE(SUM(status = 'provider_error'), 0)
+FROM app_usage_event
+WHERE organization_id IN (SELECT id FROM mgmt_organization)
+  AND created_at >= ? AND created_at < ?
+GROUP BY organization_id, app_id, substr(created_at, 1, 10)`;
+
+/** `day` moved by `days`, both as `YYYY-MM-DD`. */
+function dayAfter(day: string, days: number): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+export interface SealResult {
+  /** Days newly sealed. */
+  days: number;
+  /** Day rows written for them. */
+  rows: number;
+  /** Whether the window now ends at today, as opposed to the run hitting its budget. */
+  caughtUp: boolean;
+}
+
+/**
+ * Moves the sealed-day window: its floor up to the retention cutoff, and its
+ * end up to today, summing each newly sealed day in the same transaction that
+ * admits it.
+ *
+ * Both moves are what keep a day in exactly one place. A row below the floor
+ * is deleted as the floor passes it, so once compaction moves that day's
+ * events into the rollup, nothing else still holds them; compaction runs
+ * after this for that reason, though the triggers would keep it correct in
+ * either order, only with a write per compacted event. A day is admitted
+ * together with its sum, so a reader never sees a sealed day without its row.
+ */
+export async function sealUsageDays(
+  db: D1Database,
+  now: number = Date.now(),
+  budget: QueryBudget = new QueryBudget(SEAL_QUERY_BUDGET),
+): Promise<SealResult> {
+  const result: SealResult = { days: 0, rows: 0, caughtUp: false };
+  if (!budget.affords(1 + SEAL_STATEMENTS)) return result;
+  const window = await db
+    .prepare("SELECT sealed_from AS sealedFrom, sealed_until AS sealedUntil FROM app_usage_day_window WHERE id = 1")
+    .first<{ sealedFrom: string; sealedUntil: string }>();
+  if (!window) throw new Error("app_usage_day_window has no row");
+  const cutoff = dayBefore(now, USAGE_EVENT_RETENTION_DAYS);
+  const today = dayBefore(now, 0);
+  let { sealedFrom, sealedUntil } = window;
+
+  while (true) {
+    const from = sealedFrom > cutoff ? sealedFrom : cutoff;
+    const start = sealedUntil > from ? sealedUntil : from;
+    const limit = dayAfter(start, SEAL_DAYS_PER_BATCH);
+    const end = today > start ? (limit < today ? limit : today) : start;
+    if (from === sealedFrom && end === sealedUntil) {
+      result.caughtUp = true;
+      break;
+    }
+    if (!budget.affords(SEAL_STATEMENTS)) break;
+    const [, , sealed] = await db.batch([
+      db.prepare(MOVE_WINDOW).bind(from, end, sealedFrom, sealedUntil),
+      db.prepare("DELETE FROM app_usage_day WHERE day < ?").bind(from),
+      db.prepare(SEAL_DAYS).bind(start, end),
+    ]);
+    result.rows += sealed?.meta.changes ?? 0;
+    result.days += Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000);
+    sealedFrom = from;
+    sealedUntil = end;
+  }
+  return result;
+}
+
+/**
  * The lowest surviving id, or null for an empty table.
  *
  * Doubles as the compaction cursor, which is why none is persisted anywhere: a
@@ -311,6 +438,18 @@ export async function runUsageRetention(
         error: errorFacts(error),
       });
     }
+  }
+  // Before compaction, so the floor it raises is already past the days
+  // compaction is about to delete. A small fixed share: a healthy night
+  // spends four statements here.
+  const sealing = budget.limited(SEAL_QUERY_BUDGET);
+  try {
+    const result = await sealUsageDays(sealing.database(db), now, sealing);
+    log("info", "usage_days_sealed", { ...result });
+  } catch (error) {
+    log("error", "usage_days_seal_failed", {
+      error: errorFacts(error),
+    });
   }
   // Everything but the reserve. A view charges this budget as it spends, so
   // the nine it cannot reach are simply still here when the fold asks for them.
