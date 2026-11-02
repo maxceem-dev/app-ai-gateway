@@ -45,7 +45,7 @@ import { planCap } from "./plan-caps";
 import type { ManagementScope } from "./scope";
 import { databaseErrorMatches } from "./validation";
 import { assertMonth, EMPTY_USAGE_TOTALS, organizationMonthUsage } from "./usage-queries";
-import { endUserIdentities } from "./users";
+import { endUserCounts } from "./users";
 import { commitResourceWrite, type ResourceWriteBoundary } from "./write-boundary";
 
 type AppRow = typeof app.$inferSelect;
@@ -222,11 +222,7 @@ export async function listApps(
     .orderBy(app.id);
   const { results: usage } = await organizationMonthUsage(env.DB, organizationId, month);
   const usageByApp = new Map(usage.map(({ app_id, ...totals }) => [app_id, totals]));
-  const identities = endUserIdentities({ organizationId });
-  const counts = await prepared(env.DB, sql`${identities}
-     SELECT app_id, COUNT(*) AS total,
-            SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) AS blocked
-       FROM identities GROUP BY app_id`).all<{
+  const counts = await prepared(env.DB, endUserCounts(organizationId)).all<{
     app_id: string;
     total: number;
     blocked: number;

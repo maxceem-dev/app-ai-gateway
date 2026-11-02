@@ -584,6 +584,67 @@ export const appUsageRollup = sqliteTable(
   ],
 );
 
+/**
+ * One application's totals for one completed UTC day, kept beside the raw
+ * events of that day rather than instead of them, so the month totals the apps
+ * list and the usage summary report read about thirty rows instead of one row
+ * per request.
+ *
+ * A row exists only for a day inside {@link appUsageDayWindow}, and inside that
+ * window it always equals the sum of the day's raw events: the nightly run
+ * writes a day's rows in the same transaction that admits the day, and triggers
+ * on `app_usage_event` move them whenever an event of a sealed day is inserted
+ * late, repriced, or deleted. Nothing is written on a proxied request's own
+ * path, which records today, and today is never sealed.
+ *
+ * Not a third copy of history: rows below the window are deleted as the window
+ * moves past the retention cutoff, before compaction moves those days' events
+ * into `app_usage_rollup`. A day is therefore read from exactly one of the raw
+ * events, this table, or — once compacted — the rollup.
+ */
+export const appUsageDay = sqliteTable(
+  "app_usage_day",
+  {
+    appId: text("app_id").notNull(),
+    /** `YYYY-MM-DD`, the UTC day prefix of the events' `created_at`. */
+    day: text("day").notNull(),
+    /** Durable ownership, carried over from the events, for account cleanup. */
+    organizationId: text("organization_id").notNull(),
+    requests: integer("requests").notNull(),
+    inputTokens: integer("input_tokens").notNull(),
+    cachedInputTokens: integer("cached_input_tokens").notNull(),
+    cacheWriteTokens: integer("cache_write_tokens").notNull(),
+    outputTokens: integer("output_tokens").notNull(),
+    costUsd: real("cost_usd").notNull(),
+    errors: integer("errors").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.appId, table.day] }),
+    index("idx_app_usage_day_organization").on(table.organizationId),
+  ],
+);
+
+/**
+ * The half-open range of UTC days, `[sealed_from, sealed_until)`, whose totals
+ * {@link appUsageDay} holds. One row, created by the migration.
+ *
+ * Equal bounds are an empty window. `sealed_from` follows the retention cutoff
+ * up and `sealed_until` follows the nightly run to today, so the window never
+ * reaches a day still receiving its ordinary traffic, nor one being compacted.
+ */
+export const appUsageDayWindow = sqliteTable(
+  "app_usage_day_window",
+  {
+    id: integer("id").primaryKey(),
+    sealedFrom: text("sealed_from").notNull(),
+    sealedUntil: text("sealed_until").notNull(),
+  },
+  (table) => [
+    check("app_usage_day_window_singleton_check", sql`${table.id} = 1`),
+    check("app_usage_day_window_order_check", sql`${table.sealedFrom} <= ${table.sealedUntil}`),
+  ],
+);
+
 /** One sampled refusal before any provider attempt; diagnostics expire without rollups. */
 export const appRejectionEvent = sqliteTable(
   "app_rejection_event",

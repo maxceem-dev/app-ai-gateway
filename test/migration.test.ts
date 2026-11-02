@@ -125,11 +125,28 @@ describe("initial database migration", () => {
       "app_auth_challenge",
       "app_auth_event",
       "app_rejection_event",
+      "app_usage_day",
+      "app_usage_day_window",
       "app_usage_event",
       "app_usage_rollup",
       "app_usage_spend",
       "app_user",
     ]);
+    const dayTriggers = await env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'app_usage_day_%' ORDER BY name",
+    ).all<{ name: string }>();
+    expect(dayTriggers.results.map((row) => row.name)).toEqual([
+      "app_usage_day_after_delete",
+      "app_usage_day_after_insert",
+      "app_usage_day_after_update",
+    ]);
+    // A database this small is sealed by the migration itself, up to today,
+    // rather than left for the nightly run to catch up.
+    const sealed = await env.DB.prepare(
+      `SELECT sealed_from = date('now', '-90 days') AS from_cutoff, sealed_until = date('now') AS until_today
+       FROM app_usage_day_window`,
+    ).first();
+    expect(sealed).toEqual({ from_cutoff: 1, until_today: 1 });
     // The auth event log mirrors usage's conventions, with the two differences
     // that made it a sibling table rather than more columns on that one: a
     // nullable user (most refusals establish no identity) and its own retention.

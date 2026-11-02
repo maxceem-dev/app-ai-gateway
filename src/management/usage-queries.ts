@@ -153,6 +153,42 @@ export function rollupTotals(t: string): string {
       COALESCE(SUM(CASE WHEN ${t}.status = 'provider_error' THEN ${t}.requests ELSE 0 END), 0) AS errors`;
 }
 
+/**
+ * The same counters over `app_usage_day` rows, which carry `errors` already
+ * counted rather than a status to count it from.
+ */
+export function dayTotals(t: string): string {
+  return `
+      COALESCE(SUM(${t}.requests), 0) AS requests,
+      COALESCE(SUM(${t}.input_tokens), 0) AS input_tokens,
+      COALESCE(SUM(${t}.cached_input_tokens), 0) AS cached_input_tokens,
+      COALESCE(SUM(${t}.cache_write_tokens), 0) AS cache_write_tokens,
+      COALESCE(SUM(${t}.output_tokens), 0) AS output_tokens,
+      COALESCE(SUM(${t}.cost_usd), 0) AS cost_usd,
+      COALESCE(SUM(${t}.errors), 0) AS errors`;
+}
+
+/*
+ * A month's totals read a third place besides the two above.
+ *
+ * `app_usage_day` holds one row per app per sealed day, and inside the sealed
+ * window `[sealed_from, sealed_until)` that row always equals the day's raw
+ * events — see the table. So a month is read as its sealed days from there,
+ * and its raw events only from the two ranges the window does not cover: the
+ * days below the floor, which are about to be compacted, and the days from
+ * `sealed_until` on, which is today and anything the nightly run has not yet
+ * reached. Those two ranges and the window partition the month, and day rows
+ * exist only inside the window, so no event is read twice; the rollup holds
+ * only compacted events, which are in none of them.
+ *
+ * The window bounds are scalar subqueries in the range itself, so the index on
+ * (app_id, created_at) seeks straight to today's events and never touches the
+ * sealed days. A missing window row reads as an empty window, which answers
+ * from raw events alone: slower, never wrong.
+ */
+const SEALED_FROM = "COALESCE((SELECT sealed_from FROM app_usage_day_window WHERE id = 1), '')";
+const SEALED_UNTIL = "COALESCE((SELECT sealed_until FROM app_usage_day_window WHERE id = 1), '')";
+
 /** Re-sums the union's two already-grouped halves into one row per key. */
 export const UNION_TOTALS = `
     SUM(requests) AS requests,
@@ -279,14 +315,18 @@ LIMIT ?4`)
 }
 
 /**
- * One calendar month's totals for one app, across both tables and both grains.
+ * One calendar month's totals for one app, across raw events, sealed days, and
+ * both rollup grains.
  *
  * Matched on the month range of `bucket` across both grains: a month is held as
  * day buckets until it is folded and as one month bucket afterwards, never as
  * both. The grain constraint lets the existing (app_id, grain, bucket) index
- * seek the range. `errors` is summed by the halves and then dropped: this
+ * seek the range. `errors` is summed by the parts and then dropped: this
  * endpoint has never reported them, and widening its response is not this
  * change's business.
+ *
+ * Reads about one row per sealed day of the month plus one per request since
+ * the last nightly run, rather than one per request of the month.
  *
  * An aggregate with no GROUP BY always answers with one row, though `.first()`
  * is typed nullable; the empty month is filled in rather than spread away, so
@@ -310,7 +350,17 @@ SELECT
 FROM (
   SELECT${rawTotals("events")}
   FROM app_usage_event AS events
-  WHERE events.app_id = ?1 AND events.created_at >= ?2 AND events.created_at < ?3
+  WHERE events.app_id = ?1 AND events.created_at >= ?2
+    AND events.created_at < min(?3, ${SEALED_FROM})
+  UNION ALL
+  SELECT${rawTotals("events")}
+  FROM app_usage_event AS events
+  WHERE events.app_id = ?1 AND events.created_at >= max(?2, ${SEALED_UNTIL})
+    AND events.created_at < ?3
+  UNION ALL
+  SELECT${dayTotals("days")}
+  FROM app_usage_day AS days
+  WHERE days.app_id = ?1 AND days.day >= ?2 AND days.day < ?3
   UNION ALL
   SELECT${rollupTotals("rollup")}
   FROM app_usage_rollup AS rollup
@@ -329,6 +379,10 @@ FROM (
  *
  * The lower bound is the month prefix itself, so the range reads day and month
  * grains alike: a `YYYY-MM` bucket would fall below a `YYYY-MM-01` lower bound.
+ *
+ * Read in the same parts as {@link usageMonthTotals}, one app at a time: each
+ * part is a CROSS JOIN from the account's apps, which keeps the planner from
+ * walking the events first and looking each one's app up afterwards.
  */
 export function organizationMonthUsage(
   db: D1Database,
@@ -341,17 +395,32 @@ export function organizationMonthUsage(
 SELECT app_id,${UNION_TOTALS}
 FROM (
   SELECT events.app_id AS app_id,${rawTotals("events")}
-  FROM app_usage_event AS events
-  JOIN app AS owner ON owner.id = events.app_id
-  WHERE owner.organization_id = ?1 AND events.created_at >= ?2 AND events.created_at < ?3
-  GROUP BY app_id
+  FROM app AS owner
+  CROSS JOIN app_usage_event AS events
+  WHERE owner.organization_id = ?1 AND events.app_id = owner.id
+    AND events.created_at >= ?2 AND events.created_at < min(?3, ${SEALED_FROM})
+  GROUP BY events.app_id
+  UNION ALL
+  SELECT events.app_id AS app_id,${rawTotals("events")}
+  FROM app AS owner
+  CROSS JOIN app_usage_event AS events
+  WHERE owner.organization_id = ?1 AND events.app_id = owner.id
+    AND events.created_at >= max(?2, ${SEALED_UNTIL}) AND events.created_at < ?3
+  GROUP BY events.app_id
+  UNION ALL
+  SELECT days.app_id AS app_id,${dayTotals("days")}
+  FROM app AS owner
+  CROSS JOIN app_usage_day AS days
+  WHERE owner.organization_id = ?1 AND days.app_id = owner.id
+    AND days.day >= ?2 AND days.day < ?3
+  GROUP BY days.app_id
   UNION ALL
   SELECT rollup.app_id AS app_id,${rollupTotals("rollup")}
-  FROM app_usage_rollup AS rollup
-  JOIN app AS owner ON owner.id = rollup.app_id
-  WHERE owner.organization_id = ?1 AND rollup.grain IN ('day', 'month')
-    AND rollup.bucket >= ?2 AND rollup.bucket < ?3
-  GROUP BY app_id
+  FROM app AS owner
+  CROSS JOIN app_usage_rollup AS rollup
+  WHERE owner.organization_id = ?1 AND rollup.app_id = owner.id
+    AND rollup.grain IN ('day', 'month') AND rollup.bucket >= ?2 AND rollup.bucket < ?3
+  GROUP BY rollup.app_id
 )
 GROUP BY app_id`)
     .bind(organizationId, bounds.from, bounds.toExclusive)

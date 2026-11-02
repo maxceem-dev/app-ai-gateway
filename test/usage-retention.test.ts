@@ -495,8 +495,10 @@ describe("runUsageRetention", () => {
       .bind(APP, TEST_ORGANIZATION_ID)
       .run();
 
-    // One for the spend prune, four compaction can reach, nine reserved.
-    const budget = new QueryBudget(14);
+    // One for the spend prune, one for the sealed-day window read (it has
+    // nothing to seal at this test's fixed date), four compaction can reach,
+    // nine reserved.
+    const budget = new QueryBudget(15);
     await runUsageRetention(budget.database(env.DB), NOW, budget);
 
     // Compaction stopped at the reserve rather than at the backlog.
@@ -504,7 +506,7 @@ describe("runUsageRetention", () => {
     // And the fold still ran, on the allowance held back for it.
     const months = (await rollupRows()).filter((row) => row.grain === "month");
     expect(months.map((row) => row.bucket)).toEqual(["2024-03"]);
-    expect(budget.spent).toBeLessThanOrEqual(14);
+    expect(budget.spent).toBeLessThanOrEqual(15);
   });
 });
 
@@ -772,7 +774,7 @@ function countingDatabase(collected: number) {
 }
 
 /** Statements one account cleanup pass issues, pinned by the test below. */
-const ACCOUNT_CLEANUP_STATEMENTS = 20;
+const ACCOUNT_CLEANUP_STATEMENTS = 21;
 
 it("charges the nightly allowance for exactly what a sweep issues", async () => {
   const { db, counts } = countingDatabase(0);
