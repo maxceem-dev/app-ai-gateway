@@ -80,7 +80,7 @@ passed as arguments. Keep them in a private dotenv file and point
 | `SMOKE_GATEWAY_URL` | The gateway under test |
 | `SMOKE_CONSOLE_URL` | Optional. Its console and MCP, when the deployment serves them on a host of its own (default `SMOKE_GATEWAY_URL`) |
 | `SMOKE_MANAGEMENT_KEY` | A `manage` management key of a **dedicated** test account |
-| `SMOKE_MOCK_URL` | The mock provider's public HTTPS origin |
+| `SMOKE_MOCK_URL` | The mock provider's public HTTPS origin, with no path: a second mock needs a host of its own |
 | `SMOKE_MOCK_SECRET` | The fake provider key the mock accepts |
 | `SMOKE_ISSUER_KEY` | The private key the test identity provider signs tokens with |
 | `SMOKE_RUNNER` | Optional. Names this runner's app keys, so two runners never revoke each other's (default `local`) |
