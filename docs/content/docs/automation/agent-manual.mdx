@@ -596,6 +596,35 @@ For Auth0's API-identifier preset, `issuer_token` must be a JWT access token
 for that API. Firebase uses its ID token. In every case the configured issuer
 and audience must match; see [User authentication](/applications/auth-policy/user-authentication).
 
+## Contacting human support
+
+Where the deployment offers human support, you can write to it on the
+person's behalf: `agw support send` with the CLI, `contact_support` over MCP,
+or `POST /v1/admin/support` with a management key. Support replies to the
+person's own email address, never to you.
+
+1. Only when the person asked you to contact support. Show them the exact
+   message first, and send it only once they agree. Without a terminal,
+   `agw support send` refuses to send unless you pass `--yes`, which says you
+   have done this.
+2. Choose the type: `bug` for something broken, `support` for a question or a
+   request for help, `feedback` for an idea or a missing feature.
+3. Write what happened, what they expected and what was tried. Put ids and
+   codes in context so support can act without asking back:
+   `--context app_id=my-app --context request_id=… --context error_code=…`.
+4. Never include a key, token or password. A message or context value that
+   looks like one is refused with `invalid_request`, and nothing is sent.
+5. Tell the person the answer's `reference`, such as `SUP-7F3K2Q`. The same
+   message sent again within ten minutes sends nothing new: the answer has
+   `duplicate: true` and the first reference, so do not resend to make sure.
+6. If the gateway refuses because the account cannot use human support, tell
+   the person what the message says instead of retrying.
+
+```sh
+agw support send --type bug --message "Streaming responses from my-app stop after about 30 seconds since Monday." \
+  --context app_id=my-app --context error_code=provider_timeout --yes --json --no-input
+```
+
 ## Reporting back
 
 When you finish a task, report: what you created or changed, by ID and slug;

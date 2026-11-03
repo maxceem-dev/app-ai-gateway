@@ -79,6 +79,8 @@ function nextActionFor(status: number, code: string, details: CliErrorDetails): 
   if (status === 401) return "Run agw account login.";
   if (code === "billing_plan_limit_reached")
     return "Delete one you no longer need, or move to a plan whose limits are higher.";
+  if (code === "support_plan_required")
+    return "Tell the person human support is included with paid plans; an account owner can choose one on the console's Billing page.";
   if (status === 429) {
     const seconds = details.retryAfterSeconds;
     if (seconds === undefined)

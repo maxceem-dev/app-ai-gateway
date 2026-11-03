@@ -23,6 +23,9 @@ export const adminRoutes = new Hono<AdminEnv>();
 /** Supplies the priced model catalog used by the proxy-policy editor. */
 adminRouter(adminRoutes).handle("listModelPrices");
 
+/** Human support, for the console, the CLI and the API alike; see `src/management/support.ts`. */
+adminRouter(adminRoutes).handle("sendSupportMessage");
+
 adminRoutes.route("/", appRoutes);
 adminRoutes.route("/", keyRoutes);
 adminRoutes.route("/", operationRoutes);

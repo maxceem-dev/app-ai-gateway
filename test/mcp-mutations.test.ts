@@ -1267,6 +1267,8 @@ describe("MCP every change tool", () => {
       args: () => Record<string, unknown>;
       /** The key the step runs with; the account's own unless the step needs another. */
       keys?: () => { manage: string; read: string };
+      /** The deployment the step runs on; this file's own unless the step needs another. */
+      through?: Env;
       after?: (result: ToolResult) => Promise<void> | void;
     }
     const opened = (result: ToolResult) => {
@@ -1417,14 +1419,45 @@ describe("MCP every change tool", () => {
       },
     ];
 
+    // Offered only by a deployment with billing, a help desk and an inbox, to
+    // an account on a paid plan; `test/support.test.ts` covers the refusals.
+    const supported = new Proxy(runtime, {
+      get(target, key, receiver) {
+        if (key === "BILLING") {
+          return {
+            getTenantAccess: async () => ({
+              plan: { planKey: "pro", planName: "Pro", isDefault: false },
+              subscription: null,
+            }),
+          };
+        }
+        if (key === "HELPDESK") {
+          return {
+            createTicket: async () => ({ ok: true, reference: "SUP-7F3K2Q", duplicate: false, delivered: true, replyTo: "x@example.test" }),
+          };
+        }
+        if (key === "SUPPORT_EMAIL") return "support@example.test";
+        return Reflect.get(target, key, receiver);
+      },
+    }) as Env;
+    steps.push({
+      tool: "contact_support",
+      args: () => ({ kind: "feedback", message: `Every change tool ran (${crypto.randomUUID()}).` }),
+      through: supported,
+      after: (result) => {
+        expect(result.structuredContent).toMatchObject({ status: "sent", duplicate: false });
+        expect(result.structuredContent.reference).toMatch(/^SUP-[2-9A-Z]{6}$/u);
+      },
+    });
+
     const changeTools = MCP_TOOLS.filter((tool) => !tool.annotations.readOnlyHint).map((tool) => tool.name);
     expect([...new Set(steps.map((step) => step.tool))].sort()).toEqual([...changeTools].sort());
 
     for (const step of steps) {
       const keys = step.keys?.() ?? { manage: owner.key, read: owner.read };
       const args = step.args();
-      expectRefusal(await callTool(keys.read, step.tool, args), "grant_insufficient");
-      const result = await callTool(keys.manage, step.tool, args);
+      expectRefusal(await callTool(keys.read, step.tool, args, step.through), "grant_insufficient");
+      const result = await callTool(keys.manage, step.tool, args, step.through);
       expect(result.isError, `${step.tool}: ${result.content[0]?.text}`).toBeFalsy();
       await step.after?.(result);
     }

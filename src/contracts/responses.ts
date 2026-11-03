@@ -92,6 +92,12 @@ export const ConsoleCapabilitiesResponseSchema = z.object({
    * the console offers the link to do it.
    */
   emailVerification: z.boolean(),
+  /**
+   * The inbox the Support menu writes to, present only where the deployment
+   * has billing and can send email. The console still offers the menu only to
+   * an organization on a paid plan, and the gateway refuses anyone else.
+   */
+  supportEmail: z.email().optional(),
 });
 
 /** The provider URL returned when a Google OAuth sign-in is initiated. */
@@ -685,6 +691,17 @@ export const ConfirmEmailVerificationResponseSchema = z.object({
   }),
 });
 
+export const SupportMessageResponseSchema = z.object({
+  status: z.literal("sent"),
+  reference: z.string().meta({
+    description: "The request's reference, such as SUP-7F3K2Q, in the email's subject too. Quote it when following up.",
+  }),
+  replyTo: z.string().meta({ description: "The address support will reply to: the sender's own." }),
+  duplicate: z.boolean().meta({
+    description: "True when the same message was sent in the last ten minutes: nothing new was sent, and reference is the earlier one's.",
+  }),
+});
+
 export const OrganizationListResponseSchema = z.object({
   organizations: z.array(OrganizationMembershipSchema),
 });
@@ -694,6 +711,7 @@ export type HealthResponse = z.infer<typeof HealthResponseSchema>;
 export type GatewayTokenResponse = z.infer<typeof GatewayTokenResponseSchema>;
 export type CurrentUserResponse = z.infer<typeof CurrentUserResponseSchema>;
 export type ConsoleCapabilitiesResponse = z.infer<typeof ConsoleCapabilitiesResponseSchema>;
+export type SupportMessageResponse = z.infer<typeof SupportMessageResponseSchema>;
 export type UsageEvent = z.infer<typeof UsageEventSchema>;
 export type UsageEventList = z.infer<typeof UsageEventListSchema>;
 export type AuthEvent = z.infer<typeof AuthEventSchema>;

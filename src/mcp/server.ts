@@ -147,6 +147,7 @@ function mcpServer(sdk: Sdk, caller: OperationCaller, request: McpRequest): McpS
     },
   );
   for (const tool of MCP_TOOLS) {
+    if (tool.available && !tool.available(caller.scope)) continue;
     server.registerTool(
       tool.name,
       {

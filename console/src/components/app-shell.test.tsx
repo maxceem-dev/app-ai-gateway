@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { AppShell } from "./app-shell";
@@ -282,6 +282,59 @@ describe("AppShell navigation", () => {
     await openAccountMenu();
 
     expect(screen.getByRole("menuitem", { name: /billing/i })).toBeTruthy();
+  });
+
+  it("offers support to an organization on a paid plan, saying the plan includes it", async () => {
+    renderAuthenticated(<AppShell>content</AppShell>, {
+      capabilities: { billing: true, supportEmail: "support@example.test" },
+      billing: GROWTH_ACCESS,
+    });
+
+    await openAccountMenu();
+    await userEvent.click(screen.getByRole("menuitem", { name: "Human Support" }));
+
+    expect(await screen.findByText("Included with your Growth plan")).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Report a Bug" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Contact Support" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Send Feedback" })).toBeTruthy();
+
+    await userEvent.click(screen.getByRole("menuitem", { name: "Report a Bug" }));
+    expect(await screen.findByRole("dialog", { name: "Report a bug" })).toBeTruthy();
+    // The message is what there is to write, not the address shown above it.
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Message")));
+    // No subject to fill in: the topic is the subject, in the mail app too.
+    expect(screen.queryByLabelText("Subject")).toBeNull();
+    expect(screen.getByRole("link", { name: "support@example.test" }).getAttribute("href")).toBe(
+      "mailto:support@example.test?subject=Bug%20report",
+    );
+  });
+
+  it("still offers support while billing cannot be reached, as the gateway still accepts it", async () => {
+    renderAuthenticated(<AppShell>content</AppShell>, {
+      capabilities: { billing: true, supportEmail: "support@example.test" },
+      billing: { state: "unavailable" },
+    });
+    await openAccountMenu();
+    await userEvent.click(screen.getByRole("menuitem", { name: "Human Support" }));
+    expect(await screen.findByRole("menuitem", { name: "Report a Bug" })).toBeTruthy();
+    expect(screen.queryByText(/Included with your/u)).toBeNull();
+  });
+
+  it("offers no support on the free plan, or where the deployment names no inbox", async () => {
+    const free = renderAuthenticated(<AppShell>content</AppShell>, {
+      capabilities: { billing: true, supportEmail: "support@example.test" },
+      billing: FREE_ACCESS,
+    });
+    await openAccountMenu();
+    expect(screen.queryByRole("menuitem", { name: /support/i })).toBeNull();
+    free.unmount();
+
+    renderAuthenticated(<AppShell>content</AppShell>, {
+      capabilities: { billing: true },
+      billing: GROWTH_ACCESS,
+    });
+    await openAccountMenu();
+    expect(screen.queryByRole("menuitem", { name: /support/i })).toBeNull();
   });
 
   it("raises a banner with a route to plans when the subscription lapses", () => {

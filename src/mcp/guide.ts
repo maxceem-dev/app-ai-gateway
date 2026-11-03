@@ -122,6 +122,27 @@ it unless the person asked for the deletion.
 \`get_operation\` reads any operation a change tool opened, by its id. It never
 returns a secret.
 
+## Human support
+
+Where the deployment offers human support, \`contact_support\` emails its
+support team on the person's behalf: \`kind\` is \`bug\`, \`support\` or
+\`feedback\`. It is there so the person can ask you to write in for them;
+it is not a way to ask for help yourself.
+
+- Only when the person asked you to contact support. Show them the exact
+  message first and send it only once they agree.
+- Write it as they would: what happened, what they expected, what was tried.
+  Put ids and error codes in \`context\` (\`app_id\`, \`request_id\`,
+  \`error_code\`) so support can act without asking back.
+- Never include a key, token or password. A message or context value that
+  looks like one is refused with \`invalid_request\`, and nothing is sent.
+- Support replies to the person's own email address, never to you. Tell them
+  the answer's \`reference\` (such as \`SUP-7F3K2Q\`), which they can quote.
+- The same message sent again within ten minutes sends nothing new: the answer
+  has \`duplicate: true\` and the first reference. Do not resend it to make sure.
+- \`support_plan_required\` means the account cannot use human support; tell
+  the person what the message says rather than retrying.
+
 ## Secrets
 
 No secret ever passes through a tool, in either direction. A provider

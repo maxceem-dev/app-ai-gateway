@@ -31,6 +31,7 @@ export function FormDialog({
   disabled,
   onSubmit,
   secondaryAction,
+  anyRole,
   className,
   children,
 }: {
@@ -43,13 +44,19 @@ export function FormDialog({
   disabled?: boolean;
   onSubmit: () => void;
   secondaryAction?: ReactNode;
+  /**
+   * For a form that changes nothing in the account — a message to support —
+   * which a read-only member may send as well.
+   */
+  anyRole?: boolean;
   className?: string;
   children: ReactNode;
 }) {
   // Enter submits the form, which would bypass the guarded button that is the
   // only visible control a read-only member sees disabled.
   const { readOnly } = useConsoleSession();
-  const blocked = readOnly || disabled || pending;
+  const blocked = (readOnly && !anyRole) || disabled || pending;
+  const Submit = anyRole ? Button : GuardedButton;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -92,10 +99,10 @@ export function FormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <GuardedButton type="submit" disabled={disabled || pending}>
+            <Submit type="submit" disabled={disabled || pending}>
               {pending ? <Loader2 className="size-4 animate-spin" /> : null}
               {submitLabel}
-            </GuardedButton>
+            </Submit>
           </DialogFooter>
         </form>
       </DialogContent>

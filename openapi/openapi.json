@@ -3156,6 +3156,10 @@
                     },
                     "emailVerification": {
                       "type": "boolean"
+                    },
+                    "supportEmail": {
+                      "type": "string",
+                      "format": "email"
                     }
                   },
                   "required": [
@@ -5705,6 +5709,184 @@
           },
           "404": {
             "description": "The requested resource does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/support": {
+      "post": {
+        "tags": [
+          "Admin billing"
+        ],
+        "operationId": "sendSupportMessage",
+        "summary": "Send a message to support",
+        "description": "Opens a support ticket for the person the credential belongs to: they get an email with its reference and their message, copied to the deployment's support inbox, and support answers them by replying to it. Send only what the person asked to send, and never a credential: a message or context value that looks like a key, token or password is refused. The same message sent again within ten minutes is not sent twice; the answer says so and repeats the reference.",
+        "security": [
+          {
+            "ConsoleSession": []
+          },
+          {
+            "ManagementBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "bug",
+                      "support",
+                      "feedback"
+                    ]
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 10000,
+                    "description": "What the person wants support to know, in their words. Never include a key, token or password."
+                  },
+                  "page": {
+                    "type": "string",
+                    "maxLength": 512,
+                    "pattern": "^\\/(?![/\\\\])[^\\\\\\s]*$",
+                    "description": "A path on the console to return to once the address is verified, such as an approval page."
+                  },
+                  "context": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    "description": "Facts that help support act without asking back, such as app_id, request_id, error_code or agw_version. Never a credential."
+                  },
+                  "client": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "What sent the message, such as `agw 0.10.3`, as the client reports it. A label only."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "message"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The ticket was opened; support replies to the sender's email address.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "sent"
+                      ]
+                    },
+                    "reference": {
+                      "type": "string",
+                      "description": "The request's reference, such as SUP-7F3K2Q, in the email's subject too. Quote it when following up."
+                    },
+                    "replyTo": {
+                      "type": "string",
+                      "description": "The address support will reply to: the sender's own."
+                    },
+                    "duplicate": {
+                      "type": "boolean",
+                      "description": "True when the same message was sent in the last ten minutes: nothing new was sent, and reference is the earlier one's."
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "reference",
+                    "replyTo",
+                    "duplicate"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is malformed, or carries something that looks like a credential (`invalid_request`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication is required or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The account's plan does not include human support (`support_plan_required`), or the credential has the read grant (`grant_insufficient`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "This deployment does not offer human support (`not_found`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The credential's owner has no email address to reply to (`conflict`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many messages were sent by this person. Carries Retry-After.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The help desk could not be reached; try again later (`email_unavailable`).",
             "content": {
               "application/json": {
                 "schema": {

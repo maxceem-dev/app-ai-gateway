@@ -75,6 +75,13 @@ interface Env {
   EMAIL_FROM?: string;
   // Where replies go instead, for example a support inbox. Optional.
   EMAIL_REPLY_TO?: string;
+  // A help desk Worker that keeps support tickets and emails the support
+  // inbox; see src/helpdesk/contract.ts. Unbound means no human support.
+  HELPDESK?: import("./helpdesk/contract").HelpdeskRuntime;
+  // The support inbox the console's Support menu shows, for people who prefer
+  // their own mail app. Support needs it, HELPDESK and billing; unset hides
+  // the menu. Not a secret.
+  SUPPORT_EMAIL?: string;
   // The vault mode, KEK version and registration list are plain `vars` in wrangler.jsonc, so the
   // deploy form shows their defaults in clear text. `wrangler types` narrows a
   // var to the literal it finds there, which is wrong for any deployment that
@@ -110,6 +117,7 @@ declare namespace Cloudflare {
     OAUTH_CIMD?: string;
     OAUTH_CLIENTS?: string;
     BILLING?: import("./billing/contract").BillingRuntime;
+    HELPDESK?: import("./helpdesk/contract").HelpdeskRuntime;
     MANAGEMENT_ANALYTICS?: AnalyticsEngineDataset;
     ANALYTICS?: import("./analytics/hook").AnalyticsHook;
     EMAIL?: SendEmail;
@@ -120,6 +128,7 @@ declare namespace Cloudflare {
     EMAIL_SENDER?: string;
     EMAIL_FROM?: string;
     EMAIL_REPLY_TO?: string;
+    SUPPORT_EMAIL?: string;
     SECRET_VAULT_MODE: string;
     SECRET_VAULT_LOCAL_KEK_CURRENT_VERSION: string;
     ALLOWED_REGISTRATION_EMAILS: string;

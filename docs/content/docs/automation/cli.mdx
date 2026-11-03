@@ -173,6 +173,23 @@ see [Sign in](#sign-in). Never put secrets in command arguments, source control,
 The CLI does not make inference requests as a setup check. Provider inference
 must be requested explicitly.
 
+## Human support
+
+Where your deployment offers human support, `agw support send` emails it for
+you, and the reply comes to your account's email address:
+
+```sh
+agw support send --type bug --message "Streaming responses stop after 30 seconds" --context app_id=my-app
+```
+
+`--type` is `bug`, `support` or `feedback`. Pipe a longer message in with
+`--message-stdin`, and add facts with repeated `--context name=value`. In a
+terminal the CLI shows the message and asks before sending; without one it
+sends only with `--yes`, so an agent has to have shown you the message first.
+A message that looks like it contains a key, token or password is refused, and
+the same message sent twice within ten minutes is sent once. The answer
+carries a reference such as `SUP-7F3K2Q` to quote when you follow up.
+
 ## Output and recovery
 
 `--json` writes one JSON document to stdout with `schemaVersion`, `ok` and either

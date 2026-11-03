@@ -63,6 +63,7 @@ import {
   OAuthConsentAllowRequestSchema,
   OAuthConsentProofSchema,
   SendVerificationEmailRequestSchema,
+  SupportMessageRequestSchema,
   ConfirmEmailVerificationRequestSchema,
   OrganizationSelectRequestSchema,
   PROVIDER_SLUG_PATTERN,
@@ -106,6 +107,7 @@ import {
   OAuthConsentDetailsResponseSchema,
   OAuthConsentRedirectResponseSchema,
   SendVerificationEmailResponseSchema,
+  SupportMessageResponseSchema,
   ConfirmEmailVerificationResponseSchema,
   OrganizationListResponseSchema,
   PricesResponseSchema,
@@ -651,6 +653,39 @@ export const CATALOG = {
     request: BillingTrialRequestSchema,
     response: BillingAccessSchema,
     responseDescription: "Trial access state.",
+  },
+
+  /*
+   * Support is part of a paid plan, so it sits with billing: it is offered
+   * only to an organization on one, and refused to everyone else. A person in
+   * the console, the CLI and an MCP client all send through this one entry, so
+   * the plan check, the secret check and the limits are the same for each.
+   *
+   * Any role may write, read-only members included: a message changes nothing
+   * in the account. The grant is the default `manage` all the same, because it
+   * emails a person, and a `read` credential changes nothing outside the
+   * gateway either.
+   */
+  sendSupportMessage: {
+    method: "POST",
+    path: "/v1/admin/support",
+    hidden: true,
+    tags: ["Admin billing"],
+    summary: "Send a message to support",
+    description: "Opens a support ticket for the person the credential belongs to: they get an email with its reference and their message, copied to the deployment's support inbox, and support answers them by replying to it. Send only what the person asked to send, and never a credential: a message or context value that looks like a key, token or password is refused. The same message sent again within ten minutes is not sent twice; the answer says so and repeats the reference.",
+    security: "management",
+    policy: { role: "member", access: "read" },
+    request: SupportMessageRequestSchema,
+    response: SupportMessageResponseSchema,
+    responseDescription: "The ticket was opened; support replies to the sender's email address.",
+    errors: {
+      400: "The body is malformed, or carries something that looks like a credential (`invalid_request`).",
+      403: "The account's plan does not include human support (`support_plan_required`), or the credential has the read grant (`grant_insufficient`).",
+      404: "This deployment does not offer human support (`not_found`).",
+      409: "The credential's owner has no email address to reply to (`conflict`).",
+      429: "Too many messages were sent by this person. Carries Retry-After.",
+      503: "The help desk could not be reached; try again later (`email_unavailable`).",
+    },
   },
 
   getApp: {

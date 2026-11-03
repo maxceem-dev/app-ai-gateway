@@ -199,10 +199,17 @@ const CHANGE_TOOL_NAMES = [
   "block_app_user",
   "unblock_app_user",
   "claim_account",
+  "contact_support",
 ];
 
 /** The design's whole table, in its order. */
 const TOOL_NAMES = [...READ_TOOL_NAMES, ...CHANGE_TOOL_NAMES];
+
+/**
+ * What a deployment without human support lists: the table less
+ * contact_support, which `test/support.test.ts` lists where it is offered.
+ */
+const LISTED_TOOL_NAMES = TOOL_NAMES.filter((name) => name !== "contact_support");
 
 /** Arguments every tool succeeds with, in an account made by {@link populated}. */
 function argumentsFor(app: string): Record<string, Record<string, unknown>> {
@@ -310,7 +317,7 @@ describe("MCP handshake", () => {
       headers: { ...bearer(TEST_MANAGEMENT_KEY), "mcp-protocol-version": LEGACY },
       body: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
     }));
-    expect(listed.message.result.tools.map((tool: { name: string }) => tool.name)).toEqual(TOOL_NAMES);
+    expect(listed.message.result.tools.map((tool: { name: string }) => tool.name)).toEqual(LISTED_TOOL_NAMES);
   });
 
   it("answers an initialize naming 2026-07-28 with the legacy handshake, since that revision has none", async () => {
@@ -354,7 +361,7 @@ describe("MCP handshake", () => {
   it("lists the tools in the fixed order, annotated by what they change, with a public day-long cache hint", async () => {
     const { message } = await rpc(TEST_MANAGEMENT_KEY, "tools/list");
     const tools = message.result.tools as { name: string; annotations: unknown; inputSchema: any }[];
-    expect(tools.map((tool) => tool.name)).toEqual(TOOL_NAMES);
+    expect(tools.map((tool) => tool.name)).toEqual(LISTED_TOOL_NAMES);
     expect(MCP_TOOLS.map((tool) => tool.name)).toEqual(TOOL_NAMES);
     const READS = { readOnlyHint: true, idempotentHint: true, openWorldHint: false };
     const effect = (destructive: boolean, idempotent: boolean) =>
@@ -379,6 +386,11 @@ describe("MCP handshake", () => {
       unblock_app_user: effect(false, true),
       claim_account: effect(false, false),
     };
+    // It emails a person outside the gateway, which no other tool does.
+    expect(MCP_TOOLS.find((tool) => tool.name === "contact_support")!.annotations).toEqual({
+      ...effect(false, false),
+      openWorldHint: true,
+    });
     for (const tool of tools) {
       expect(tool.annotations, tool.name).toEqual(expected[tool.name]);
       expect(tool.inputSchema.type, tool.name).toBe("object");

@@ -122,6 +122,15 @@ export const ENDPOINT_RATE_LIMITS = {
     action: "send a verification email",
     sharedBy: "your sign-in",
   },
+  // Each one lands in the support inbox. Ten an hour is far above a person
+  // writing in about a problem and following up, and keeps one sign-in from
+  // flooding the inbox.
+  support_message: {
+    limit: 10,
+    windowMs: 3_600_000,
+    action: "send a message to support",
+    sharedBy: "your sign-in",
+  },
   // The three application authentication endpoints are unauthenticated by
   // design, so each is counted per application and network address. They are
   // deliberately three counters rather than one: a client that registers a key
