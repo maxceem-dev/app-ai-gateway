@@ -38,3 +38,6 @@ cli/dist/
 
 # Xcode per-user state.
 xcuserdata/
+
+# Fixture state and local secrets of the smoke tests.
+smoke/.state/

@@ -71,6 +71,13 @@ The primary target is iOS applications, with secure measures for calling AI APIs
   alongside the suites rather than after them.
 - `verify` does not cover Worker configuration (`pnpm run deploy:dry-run`) or
   `docs/` (`pnpm run docs:build`).
+- `smoke/` holds checks that run against a live deployment, not the code; see
+  `smoke/README.md`. `verify` only typechecks them and runs the mock's offline
+  tests. Each check is a contract with existing clients, and older releases'
+  checks keep running against newer deployments: add a check for new
+  behaviour, and change an existing assertion only when that contract changes
+  on purpose, saying so in the pull request. Never print what `smoke/.state/`
+  holds: it contains application keys.
 - In tests, use `seedHuman` from `test/helpers.ts` rather than signing up, which
   costs about two and a half seconds.
 - Do not verify a change by driving the app in a browser unless explicitly asked.
