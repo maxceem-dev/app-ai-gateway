@@ -78,7 +78,7 @@ passed as arguments. Keep them in a private dotenv file and point
 | Variable | What it is |
 |---|---|
 | `SMOKE_GATEWAY_URL` | The gateway under test |
-| `SMOKE_CONSOLE_URL` | Optional. Its console, when the deployment serves it on a host of its own (default `SMOKE_GATEWAY_URL`) |
+| `SMOKE_CONSOLE_URL` | Optional. Its console and MCP, when the deployment serves them on a host of its own (default `SMOKE_GATEWAY_URL`) |
 | `SMOKE_MANAGEMENT_KEY` | A `manage` management key of a **dedicated** test account |
 | `SMOKE_MOCK_URL` | The mock provider's public HTTPS origin |
 | `SMOKE_MOCK_SECRET` | The fake provider key the mock accepts |

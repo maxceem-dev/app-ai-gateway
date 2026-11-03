@@ -14,7 +14,7 @@ export interface SmokeEnv {
   /** Origin of the gateway under test, with no trailing slash. */
   gatewayUrl: string;
   /**
-   * Origin of its console, sign-in and console API. The same as `gatewayUrl`
+   * Origin of its console, sign-in, console API and MCP. The same as `gatewayUrl`
    * unless the deployment gives the console a host of its own, whose API host
    * then refuses those paths.
    */

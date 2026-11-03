@@ -4,11 +4,12 @@ import { need } from "../../../src/env.ts";
 import { APP_NAMES } from "../../../src/fixtures.ts";
 import { env } from "../../support.ts";
 
-// A real MCP client, connected the way an agent connects with a management key.
+// A real MCP client, connected the way an agent connects with a management key,
+// at the console's origin, where a deployment with a console host of its own serves it.
 const client = new Client({ name: "app-ai-gateway-smoke", version: "1.0.0" });
 
 beforeAll(async () => {
-  const transport = new StreamableHTTPClientTransport(new URL("/mcp", env.gatewayUrl), {
+  const transport = new StreamableHTTPClientTransport(new URL("/mcp", env.consoleUrl), {
     requestInit: { headers: { authorization: `Bearer ${need(env, "managementKey", "SMOKE_MANAGEMENT_KEY")}` } },
   });
   await client.connect(transport);
