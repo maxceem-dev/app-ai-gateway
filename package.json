@@ -48,6 +48,11 @@
     "cli:check": "pnpm --filter @maxceem/agw check",
     "cli:test": "pnpm --filter @maxceem/agw test",
     "cli:release:github": "node cli/scripts/publish-release.mjs",
+    "smoke": "pnpm --filter @app-ai-gateway/smoke smoke",
+    "smoke:setup": "pnpm --filter @app-ai-gateway/smoke run setup",
+    "smoke:mock": "pnpm --filter @app-ai-gateway/smoke run mock",
+    "smoke:check": "pnpm --filter @app-ai-gateway/smoke check",
+    "smoke:test": "pnpm --filter @app-ai-gateway/smoke test",
     "release": "node scripts/release.mjs"
   },
   "dependencies": {

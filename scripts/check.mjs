@@ -36,6 +36,8 @@ const steps = [
   { name: "test:release-script", tier: "test" },
   { name: "test:indexnow", tier: "test" },
   { name: "test:update-models", tier: "test" },
+  { name: "smoke:check", tier: "check" },
+  { name: "smoke:test", tier: "test" },
 ];
 
 const tier = process.argv[2];

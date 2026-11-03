@@ -2,6 +2,7 @@ packages:
   - cli
   - console
   - docs
+  - smoke
 
 allowBuilds:
   cbor-extract: true
