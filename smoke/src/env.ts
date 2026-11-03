@@ -39,7 +39,13 @@ function value(name: string): string | undefined {
   return raw ? raw : undefined;
 }
 
-function origin(raw: string, name: string): string {
+/**
+ * An address the checks build paths on, which is an origin and nothing more.
+ * A path, query or fragment after it is refused rather than dropped: dropped,
+ * a mock at `https://probe.example.com/compat` would quietly become the one at
+ * `https://probe.example.com`, and the checks would talk to the wrong mock.
+ */
+export function origin(raw: string, name: string): string {
   let url: URL;
   try {
     url = new URL(raw);
@@ -47,6 +53,9 @@ function origin(raw: string, name: string): string {
     throw new Error(`${name} must be an absolute URL`);
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error(`${name} must be an http(s) URL`);
+  if (url.pathname !== "/" || url.search || url.hash) {
+    throw new Error(`${name} must be an origin, such as ${url.origin}, with no path: give each mock or console a host of its own`);
+  }
   return url.origin;
 }
 
